@@ -9,26 +9,29 @@ const createComplaint = async (req, res) => {
       description,
       category,
       location,
-      reportedBy,
       priority,
     } = req.body;
 
-    if (!title || !description || !location || !reportedBy) {
+    // Check required fields
+    if (!title || !description || !location) {
       return res.status(400).json({
-        message:
-          "Title, description, location and reportedBy are required",
+        message: "Title, description and location are required",
       });
     }
 
-    // Check whether reporting user exists
+    // Get the logged-in user from JWT
+    const reportedBy = req.user.userId;
+
+    // Make sure the logged-in user still exists
     const user = await User.findById(reportedBy);
 
     if (!user) {
       return res.status(404).json({
-        message: "Reporting user not found",
+        message: "Authenticated user not found",
       });
     }
 
+    // Create complaint using authenticated user
     const complaint = await Complaint.create({
       title,
       description,
@@ -38,6 +41,7 @@ const createComplaint = async (req, res) => {
       priority,
     });
 
+    // Return populated complaint
     const populatedComplaint = await Complaint.findById(complaint._id)
       .populate("reportedBy", "name email role")
       .populate("assignedTo", "name email role");
@@ -103,7 +107,7 @@ const updateComplaint = async (req, res) => {
   try {
     const { assignedTo } = req.body;
 
-    // Check assigned user if provided
+    // Validate assigned user if provided
     if (assignedTo) {
       const user = await User.findById(assignedTo);
 

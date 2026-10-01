@@ -8,12 +8,21 @@ const {
   deleteDepartment,
 } = require("../controllers/departmentController");
 
+const { protect } = require("../middleware/authMiddleware");
+const { authorize } = require("../middleware/roleMiddleware");
+
 const router = express.Router();
 
-router.post("/", createDepartment);
+// All department routes require authentication
+router.use(protect);
+
+// Anyone authenticated can view departments
 router.get("/", getDepartments);
 router.get("/:id", getDepartmentById);
-router.put("/:id", updateDepartment);
-router.delete("/:id", deleteDepartment);
+
+// Only admins can modify departments
+router.post("/", authorize("admin"), createDepartment);
+router.put("/:id", authorize("admin"), updateDepartment);
+router.delete("/:id", authorize("admin"), deleteDepartment);
 
 module.exports = router;

@@ -8,21 +8,37 @@ const {
   deleteMaintenance,
 } = require("../controllers/maintenanceController");
 
+const { protect } = require("../middleware/authMiddleware");
+const { authorize } = require("../middleware/roleMiddleware");
+
 const router = express.Router();
 
-// Create maintenance task
-router.post("/", createMaintenance);
+// All maintenance routes require authentication
+router.use(protect);
 
-// Get all maintenance tasks
+// Any authenticated user can view maintenance tasks
 router.get("/", getMaintenanceTasks);
-
-// Get maintenance task by ID
 router.get("/:id", getMaintenanceById);
 
-// Update maintenance task
-router.put("/:id", updateMaintenance);
+// Maintenance staff and admins can create tasks
+router.post(
+  "/",
+  authorize("maintenance", "admin"),
+  createMaintenance
+);
 
-// Delete maintenance task
-router.delete("/:id", deleteMaintenance);
+// Maintenance staff and admins can update tasks
+router.put(
+  "/:id",
+  authorize("maintenance", "admin"),
+  updateMaintenance
+);
+
+// Only admins can delete maintenance tasks
+router.delete(
+  "/:id",
+  authorize("admin"),
+  deleteMaintenance
+);
 
 module.exports = router;

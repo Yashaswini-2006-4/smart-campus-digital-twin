@@ -8,12 +8,21 @@ const {
   deleteFacility,
 } = require("../controllers/facilityController");
 
+const { protect } = require("../middleware/authMiddleware");
+const { authorize } = require("../middleware/roleMiddleware");
+
 const router = express.Router();
 
-router.post("/", createFacility);
+// All facility routes require authentication
+router.use(protect);
+
+// Anyone authenticated can view facilities
 router.get("/", getFacilities);
 router.get("/:id", getFacilityById);
-router.put("/:id", updateFacility);
-router.delete("/:id", deleteFacility);
+
+// Only admins can modify facilities
+router.post("/", authorize("admin"), createFacility);
+router.put("/:id", authorize("admin"), updateFacility);
+router.delete("/:id", authorize("admin"), deleteFacility);
 
 module.exports = router;

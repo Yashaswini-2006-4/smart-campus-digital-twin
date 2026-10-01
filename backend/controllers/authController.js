@@ -5,7 +5,7 @@ const User = require("../models/User");
 // Register a new user
 const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password } = req.body;
 
     // Check required fields
     if (!name || !email || !password) {
@@ -26,12 +26,12 @@ const register = async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user
+    // Public registration always creates a student account
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
-      role: role || "student",
+      role: "student",
     });
 
     res.status(201).json({
@@ -63,6 +63,15 @@ const login = async (req, res) => {
       });
     }
 
+    // Check JWT configuration
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+
+      return res.status(500).json({
+        message: "Authentication configuration error",
+      });
+    }
+
     // Find user
     const user = await User.findOne({ email });
 
@@ -90,7 +99,7 @@ const login = async (req, res) => {
         userId: user._id,
         role: user.role,
       },
-      process.env.JWT_SECRET || "temporary-secret",
+      process.env.JWT_SECRET,
       {
         expiresIn: "1d",
       }
