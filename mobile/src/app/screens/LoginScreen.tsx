@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { router } from 'expo-router';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -16,14 +17,16 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
-    if (!email || !password) {
-      Alert.alert('Missing Information', 'Please enter email and password.');
-      return;
-    }
+  if (!email || !password) {
+    Alert.alert(
+      'Missing Information',
+      'Please enter email and password.'
+    );
+    return;
+  }
 
-    Alert.alert('Login', `Welcome! Login for ${email} is ready.`);
-  };
-
+  router.push('/role-selection');
+};
   return (
     <KeyboardAvoidingView
       style={styles.container}
