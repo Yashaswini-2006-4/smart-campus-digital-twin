@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,13 +10,16 @@ import {
   View,
 } from 'react-native';
 
-
 // ============================================================
-// API URL
+// API CONFIGURATION
 // ============================================================
 
-const API_URL = 'http://127.0.0.1:8000';
+// For Expo Web running on this same computer:
+const API_URL =  "http://192.168.31.98:8000";
 
+// For a physical Android phone, replace 127.0.0.1 with
+// your computer's LAN IP address, for example:
+// const API_URL = 'http://192.168.1.10:8000';
 
 // ============================================================
 // TYPES
@@ -38,73 +41,59 @@ interface SensorResponse {
   message?: string;
 }
 
+interface WeatherData {
+  location: string;
+  region?: string | null;
+  country?: string | null;
+  local_time?: string | null;
+  temperature_c: number;
+  humidity: number;
+  condition: string;
+  feels_like_c: number;
+  wind_kph: number;
+  last_updated: string;
+  source: string;
+  data_type: string;
+}
 
 // ============================================================
 // COMPONENT
 // ============================================================
 
 export default function LiveCampusData() {
+  // Manual campus readings
+  const [occupancy, setOccupancy] = useState('');
+  const [energy, setEnergy] = useState('');
+  const [temperature, setTemperature] = useState('');
+  const [humidity, setHumidity] = useState('');
+  const [classSchedule, setClassSchedule] = useState(true);
 
-  // ----------------------------------------------------------
-  // Input values
-  // ----------------------------------------------------------
-
-  const [occupancy, setOccupancy] =
-    useState('');
-
-  const [energy, setEnergy] =
-    useState('');
-
-  const [temperature, setTemperature] =
-    useState('');
-
-  const [humidity, setHumidity] =
-    useState('');
-
-  const [classSchedule, setClassSchedule] =
-    useState(true);
-
-
-  // ----------------------------------------------------------
-  // Latest stored data
-  // ----------------------------------------------------------
-
+  // Latest database reading
   const [latestData, setLatestData] =
     useState<SensorData | null>(null);
 
+  // Live weather
+  const [weather, setWeather] =
+    useState<WeatherData | null>(null);
 
-  // ----------------------------------------------------------
-  // Loading states
-  // ----------------------------------------------------------
-
-  const [loading, setLoading] =
+  const [weatherLoading, setWeatherLoading] =
     useState(true);
 
-  const [saving, setSaving] =
-    useState(false);
-
-
-  // ----------------------------------------------------------
-  // Messages
-  // ----------------------------------------------------------
-
-  const [error, setError] =
+  const [weatherError, setWeatherError] =
     useState<string | null>(null);
 
-  const [success, setSuccess] =
-    useState<string | null>(null);
-
+  // Loading and feedback
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   // ==========================================================
-  // LOAD LATEST DATA
+  // LOAD LATEST DATABASE READING
   // ==========================================================
 
-  const loadLatestData = async () => {
-
+  const loadLatestData = useCallback(async () => {
     try {
-
-      setLoading(true);
-
       setError(null);
 
       const response = await fetch(
@@ -112,107 +101,105 @@ export default function LiveCampusData() {
       );
 
       if (!response.ok) {
-
         throw new Error(
-          `Server returned ${response.status}`
+          `Unable to load campus data (${response.status}).`
         );
       }
 
-      const result: SensorResponse =
-        await response.json();
+      const result: SensorResponse = await response.json();
 
       if (result.data) {
+        setLatestData(result.data);
 
-        setLatestData(
-          result.data
-        );
-
-        // Fill input fields with
-        // current database values.
-
-        setOccupancy(
-          String(result.data.occupancy)
-        );
-
-        setEnergy(
-          String(result.data.energy)
-        );
-
-        setTemperature(
-          String(result.data.temperature)
-        );
-
-        setHumidity(
-          String(result.data.humidity)
-        );
+        setOccupancy(String(result.data.occupancy));
+        setEnergy(String(result.data.energy));
+        setTemperature(String(result.data.temperature));
+        setHumidity(String(result.data.humidity));
 
         setClassSchedule(
           result.data.class_schedule === 1
         );
+      } else {
+        setLatestData(null);
       }
-
     } catch (err) {
-
-      console.error(
-        'Sensor data error:',
-        err
-      );
-
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to load sensor data.'
+          : 'Unable to load campus data.'
       );
-
     } finally {
-
       setLoading(false);
     }
-  };
+  }, []);
 
+  // ==========================================================
+  // LOAD LIVE WEATHER
+  // ==========================================================
+
+  const loadWeather = useCallback(async () => {
+    try {
+      setWeatherLoading(true);
+      setWeatherError(null);
+
+      const response = await fetch(
+        `${API_URL}/environment`
+      );
+
+      if (!response.ok) {
+        let message =
+          `Weather service returned ${response.status}.`;
+
+        try {
+          const result = await response.json();
+
+          if (typeof result.detail === 'string') {
+            message = result.detail;
+          }
+        } catch {
+          // Keep the default message.
+        }
+
+        throw new Error(message);
+      }
+
+      const result: WeatherData = await response.json();
+
+      setWeather(result);
+    } catch (err) {
+      setWeatherError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load live weather.'
+      );
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
 
   // ==========================================================
   // INITIAL LOAD
   // ==========================================================
 
   useEffect(() => {
-
-    loadLatestData();
-
-  }, []);
-
+    void loadLatestData();
+    void loadWeather();
+  }, [loadLatestData, loadWeather]);
 
   // ==========================================================
-  // SAVE SENSOR DATA
+  // SAVE MANUAL CAMPUS READING
   // ==========================================================
 
   const saveSensorData = async () => {
-
     try {
-
       setSaving(true);
-
       setError(null);
-
       setSuccess(null);
 
-
-      // ------------------------------------------------------
-      // Validate inputs
-      // ------------------------------------------------------
-
-      const occupancyValue =
-        Number(occupancy);
-
-      const energyValue =
-        Number(energy);
-
-      const temperatureValue =
-        Number(temperature);
-
-      const humidityValue =
-        Number(humidity);
-
+      const occupancyValue = Number(occupancy);
+      const energyValue = Number(energy);
+      const temperatureValue = Number(temperature);
+      const humidityValue = Number(humidity);
 
       if (
         occupancy.trim() === '' ||
@@ -220,161 +207,110 @@ export default function LiveCampusData() {
         temperature.trim() === '' ||
         humidity.trim() === ''
       ) {
-
         throw new Error(
-          'Please fill in all sensor values.'
+          'Please fill in all campus reading fields.'
         );
       }
 
-
       if (
-        Number.isNaN(occupancyValue) ||
-        Number.isNaN(energyValue) ||
-        Number.isNaN(temperatureValue) ||
-        Number.isNaN(humidityValue)
+        !Number.isFinite(occupancyValue) ||
+        !Number.isFinite(energyValue) ||
+        !Number.isFinite(temperatureValue) ||
+        !Number.isFinite(humidityValue)
       ) {
-
         throw new Error(
           'Please enter valid numeric values.'
         );
       }
 
-
       if (occupancyValue < 0) {
-
         throw new Error(
           'Occupancy cannot be negative.'
         );
       }
 
-
       if (energyValue < 0) {
-
         throw new Error(
           'Energy cannot be negative.'
         );
       }
 
-
       if (
         temperatureValue < -50 ||
         temperatureValue > 80
       ) {
-
         throw new Error(
           'Temperature must be between -50°C and 80°C.'
         );
       }
 
-
       if (
         humidityValue < 0 ||
         humidityValue > 100
       ) {
-
         throw new Error(
           'Humidity must be between 0% and 100%.'
         );
       }
 
-
-      // ------------------------------------------------------
-      // POST to FastAPI
-      // ------------------------------------------------------
-
       const response = await fetch(
         `${API_URL}/sensor-data`,
         {
           method: 'POST',
-
           headers: {
             'Content-Type': 'application/json',
           },
-
           body: JSON.stringify({
-
             occupancy: occupancyValue,
-
             energy: energyValue,
-
             temperature: temperatureValue,
-
             humidity: humidityValue,
-
-            class_schedule:
-              classSchedule ? 1 : 0,
-
+            class_schedule: classSchedule ? 1 : 0,
           }),
         }
       );
 
-
       if (!response.ok) {
-
         throw new Error(
-          `Server returned ${response.status}`
+          `Unable to save reading (${response.status}).`
         );
       }
 
-
-      const result =
-        await response.json();
-
+      const result = await response.json();
 
       if (result.error) {
-
-        throw new Error(
-          result.error
-        );
+        throw new Error(result.error);
       }
-
-
-      // ------------------------------------------------------
-      // Update latest data
-      // ------------------------------------------------------
 
       if (result.data) {
-
-        setLatestData(
-          result.data
-        );
+        setLatestData(result.data);
+      } else {
+        // Reload the database if the API response
+        // does not include the saved reading.
+        await loadLatestData();
       }
 
-
       setSuccess(
-        'Sensor reading saved successfully.'
+        'Campus reading saved successfully.'
       );
-
     } catch (err) {
-
-      console.error(
-        'Save sensor data error:',
-        err
-      );
-
       setError(
         err instanceof Error
           ? err.message
-          : 'Unable to save sensor data.'
+          : 'Unable to save campus reading.'
       );
-
     } finally {
-
       setSaving(false);
     }
   };
-
 
   // ==========================================================
   // LOADING
   // ==========================================================
 
   if (loading) {
-
     return (
-
       <View style={styles.loadingContainer}>
-
         <ActivityIndicator
           size="large"
           color="#2563EB"
@@ -383,125 +319,263 @@ export default function LiveCampusData() {
         <Text style={styles.loadingText}>
           Loading campus data...
         </Text>
-
       </View>
     );
   }
-
 
   // ==========================================================
   // MAIN UI
   // ==========================================================
 
   return (
-
     <ScrollView
       style={styles.container}
-      contentContainerStyle={
-        styles.contentContainer
-      }
+      contentContainerStyle={styles.contentContainer}
       keyboardShouldPersistTaps="handled"
     >
-
-      {/* ====================================================
-          HEADER
-      ==================================================== */}
+      {/* HEADER */}
 
       <View style={styles.header}>
-
         <View style={styles.headerIcon}>
-
           <Text style={styles.headerIconText}>
             📡
           </Text>
-
         </View>
 
         <View style={styles.headerText}>
-
           <Text style={styles.title}>
             Live Campus Data
           </Text>
 
           <Text style={styles.subtitle}>
-            Update campus sensor readings
+            Campus readings and live outdoor weather
           </Text>
-
         </View>
-
       </View>
 
-
-      {/* ====================================================
-          STATUS
-      ==================================================== */}
+      {/* DATABASE STATUS */}
 
       <View style={styles.statusCard}>
-
         <View style={styles.statusDot} />
 
         <View style={styles.statusTextContainer}>
-
           <Text style={styles.statusTitle}>
-            Database Connected
+            Campus Database
           </Text>
 
           <Text style={styles.statusSubtitle}>
-            Sensor data is stored persistently
+            View and update stored campus readings
           </Text>
-
         </View>
 
-        <Text style={styles.statusCheck}>
-          ✓
-        </Text>
-
+        <Text style={styles.statusCheck}>✓</Text>
       </View>
 
+      {/* LIVE WEATHER CARD */}
 
-      {/* ====================================================
-          INFO
-      ==================================================== */}
+      <View style={styles.weatherCard}>
+        <View style={styles.weatherHeader}>
+          <View style={styles.weatherIconBox}>
+            <Text style={styles.weatherIcon}>
+              🌦️
+            </Text>
+          </View>
+
+          <View style={styles.weatherHeaderText}>
+            <Text style={styles.weatherTitle}>
+              Live Outdoor Weather
+            </Text>
+
+            <Text style={styles.weatherSubtitle}>
+              {weather
+                ? `${weather.location}${
+                    weather.region
+                      ? `, ${weather.region}`
+                      : ''
+                  }`
+                : 'WeatherAPI'}
+            </Text>
+          </View>
+
+          <View style={styles.liveBadge}>
+            <View style={styles.liveDot} />
+
+            <Text style={styles.liveBadgeText}>
+              LIVE
+            </Text>
+          </View>
+        </View>
+
+        {weatherLoading ? (
+          <View style={styles.weatherLoading}>
+            <ActivityIndicator
+              size="small"
+              color="#2563EB"
+            />
+
+            <Text style={styles.weatherLoadingText}>
+              Fetching current weather...
+            </Text>
+          </View>
+        ) : weatherError ? (
+          <View style={styles.weatherErrorBox}>
+            <Text style={styles.weatherErrorTitle}>
+              Weather unavailable
+            </Text>
+
+            <Text style={styles.weatherErrorText}>
+              {weatherError}
+            </Text>
+
+            <Pressable
+              style={styles.weatherRetryButton}
+              onPress={() => void loadWeather()}
+            >
+              <Text style={styles.weatherRetryText}>
+                Retry
+              </Text>
+            </Pressable>
+          </View>
+        ) : weather ? (
+          <>
+            <View style={styles.weatherMain}>
+              <View>
+                <Text style={styles.weatherTemperature}>
+                  {weather.temperature_c.toFixed(1)}°C
+                </Text>
+
+                <Text style={styles.weatherCondition}>
+                  {weather.condition}
+                </Text>
+              </View>
+
+              <Text style={styles.weatherBigIcon}>
+                {weather.condition.toLowerCase().includes('rain')
+                  ? '🌧️'
+                  : weather.condition.toLowerCase().includes('cloud')
+                    ? '☁️'
+                    : weather.condition.toLowerCase().includes('sun')
+                      ? '☀️'
+                      : '🌤️'}
+              </Text>
+            </View>
+
+            <View style={styles.weatherMetrics}>
+              <View style={styles.weatherMetric}>
+                <Text style={styles.weatherMetricIcon}>
+                  💧
+                </Text>
+
+                <View>
+                  <Text style={styles.weatherMetricLabel}>
+                    Humidity
+                  </Text>
+
+                  <Text style={styles.weatherMetricValue}>
+                    {weather.humidity}%
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.weatherMetric}>
+                <Text style={styles.weatherMetricIcon}>
+                  🌡️
+                </Text>
+
+                <View>
+                  <Text style={styles.weatherMetricLabel}>
+                    Feels like
+                  </Text>
+
+                  <Text style={styles.weatherMetricValue}>
+                    {weather.feels_like_c.toFixed(1)}°C
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.weatherMetric}>
+                <Text style={styles.weatherMetricIcon}>
+                  💨
+                </Text>
+
+                <View>
+                  <Text style={styles.weatherMetricLabel}>
+                    Wind
+                  </Text>
+
+                  <Text style={styles.weatherMetricValue}>
+                    {weather.wind_kph.toFixed(1)} km/h
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.weatherUpdated}>
+              Weather observation: {weather.last_updated}
+            </Text>
+
+            <Text style={styles.weatherSource}>
+              Source: {weather.source} · Outdoor conditions
+            </Text>
+          </>
+        ) : null}
+
+        <Pressable
+          style={styles.weatherRefreshButton}
+          onPress={() => void loadWeather()}
+          disabled={weatherLoading}
+        >
+          {weatherLoading ? (
+            <ActivityIndicator
+              size="small"
+              color="#2563EB"
+            />
+          ) : (
+            <Text style={styles.weatherRefreshIcon}>
+              ↻
+            </Text>
+          )}
+
+          <Text style={styles.weatherRefreshText}>
+            Refresh Weather
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* INFORMATION */}
 
       <View style={styles.infoCard}>
-
-        <Text style={styles.infoIcon}>
-          💡
-        </Text>
+        <Text style={styles.infoIcon}>💡</Text>
 
         <Text style={styles.infoText}>
-          Enter the latest campus conditions.
-          The stored values will be used by the
-          ML models for anomaly detection,
-          health scoring and recommendations.
+          Weather values come from WeatherAPI and
+          represent outdoor conditions. Campus
+          readings below are entered separately
+          and saved to your database.
         </Text>
-
       </View>
 
-
-      {/* ====================================================
-          SENSOR INPUTS
-      ==================================================== */}
+      {/* MANUAL CAMPUS INPUTS */}
 
       <View style={styles.formCard}>
-
         <Text style={styles.sectionTitle}>
-          Sensor Readings
+          Campus Readings
         </Text>
 
+        <Text style={styles.formDescription}>
+          Enter the latest campus data. These
+          readings are stored for campus analysis.
+        </Text>
 
-        {/* --------------------------------------------------
-            OCCUPANCY
-        -------------------------------------------------- */}
+        {/* OCCUPANCY */}
 
         <View style={styles.inputGroup}>
-
           <Text style={styles.inputLabel}>
             👥 Occupancy
           </Text>
 
           <Text style={styles.inputDescription}>
-            Number of people currently on campus
+            Number of people on campus
           </Text>
 
           <TextInput
@@ -512,22 +586,17 @@ export default function LiveCampusData() {
             placeholderTextColor="#9CA3AF"
             keyboardType="numeric"
           />
-
         </View>
 
-
-        {/* --------------------------------------------------
-            ENERGY
-        -------------------------------------------------- */}
+        {/* ENERGY */}
 
         <View style={styles.inputGroup}>
-
           <Text style={styles.inputLabel}>
             ⚡ Energy Consumption
           </Text>
 
           <Text style={styles.inputDescription}>
-            Current campus energy usage
+            Campus energy reading or test value
           </Text>
 
           <TextInput
@@ -536,24 +605,19 @@ export default function LiveCampusData() {
             onChangeText={setEnergy}
             placeholder="Example: 1500"
             placeholderTextColor="#9CA3AF"
-            keyboardType="numeric"
+            keyboardType="decimal-pad"
           />
-
         </View>
 
-
-        {/* --------------------------------------------------
-            TEMPERATURE
-        -------------------------------------------------- */}
+        {/* TEMPERATURE */}
 
         <View style={styles.inputGroup}>
-
           <Text style={styles.inputLabel}>
             🌡️ Temperature
           </Text>
 
           <Text style={styles.inputDescription}>
-            Current temperature in °C
+            Manually entered campus reading in °C
           </Text>
 
           <TextInput
@@ -564,22 +628,17 @@ export default function LiveCampusData() {
             placeholderTextColor="#9CA3AF"
             keyboardType="decimal-pad"
           />
-
         </View>
 
-
-        {/* --------------------------------------------------
-            HUMIDITY
-        -------------------------------------------------- */}
+        {/* HUMIDITY */}
 
         <View style={styles.inputGroup}>
-
           <Text style={styles.inputLabel}>
             💧 Humidity
           </Text>
 
           <Text style={styles.inputDescription}>
-            Current humidity percentage
+            Manually entered campus reading in %
           </Text>
 
           <TextInput
@@ -590,18 +649,12 @@ export default function LiveCampusData() {
             placeholderTextColor="#9CA3AF"
             keyboardType="decimal-pad"
           />
-
         </View>
 
-
-        {/* --------------------------------------------------
-            CLASS SCHEDULE
-        -------------------------------------------------- */}
+        {/* CLASS SCHEDULE */}
 
         <View style={styles.scheduleRow}>
-
           <View style={styles.scheduleText}>
-
             <Text style={styles.inputLabel}>
               🎓 Classes Scheduled
             </Text>
@@ -609,142 +662,87 @@ export default function LiveCampusData() {
             <Text style={styles.inputDescription}>
               Are classes currently scheduled?
             </Text>
-
           </View>
 
           <Switch
             value={classSchedule}
-            onValueChange={
-              setClassSchedule
-            }
+            onValueChange={setClassSchedule}
             trackColor={{
               false: '#D1D5DB',
               true: '#93C5FD',
             }}
             thumbColor={
-              classSchedule
-                ? '#2563EB'
-                : '#F3F4F6'
+              classSchedule ? '#2563EB' : '#F3F4F6'
             }
           />
-
         </View>
 
-
-        {/* --------------------------------------------------
-            SAVE BUTTON
-        -------------------------------------------------- */}
+        {/* SAVE */}
 
         <Pressable
           style={[
             styles.saveButton,
-            saving &&
-              styles.saveButtonDisabled,
+            saving && styles.buttonDisabled,
           ]}
-          onPress={saveSensorData}
+          onPress={() => void saveSensorData()}
           disabled={saving}
         >
-
           {saving ? (
-
             <ActivityIndicator
               size="small"
               color="#FFFFFF"
             />
-
           ) : (
-
-            <Text style={styles.saveIcon}>
-              💾
-            </Text>
-
+            <Text style={styles.saveIcon}>💾</Text>
           )}
 
           <Text style={styles.saveButtonText}>
-
             {saving
               ? 'Saving...'
-              : 'Save Sensor Reading'}
-
+              : 'Save Campus Reading'}
           </Text>
-
         </Pressable>
-
       </View>
 
-
-      {/* ====================================================
-          SUCCESS
-      ==================================================== */}
+      {/* SUCCESS */}
 
       {success && (
-
         <View style={styles.successCard}>
-
-          <Text style={styles.successIcon}>
-            ✅
-          </Text>
+          <Text style={styles.successIcon}>✅</Text>
 
           <Text style={styles.successText}>
             {success}
           </Text>
-
         </View>
-
       )}
 
-
-      {/* ====================================================
-          ERROR
-      ==================================================== */}
+      {/* ERROR */}
 
       {error && (
-
         <View style={styles.errorCard}>
-
-          <Text style={styles.errorIcon}>
-            ⚠️
-          </Text>
+          <Text style={styles.errorIcon}>⚠️</Text>
 
           <Text style={styles.errorText}>
             {error}
           </Text>
-
         </View>
-
       )}
 
-
-      {/* ====================================================
-          LATEST DATA
-      ==================================================== */}
+      {/* LATEST STORED DATA */}
 
       {latestData && (
-
         <View style={styles.latestCard}>
-
           <View style={styles.latestHeader}>
-
             <Text style={styles.latestTitle}>
               Latest Stored Reading
             </Text>
 
-            <Text style={styles.latestCheck}>
-              ✓
-            </Text>
-
+            <Text style={styles.latestCheck}>✓</Text>
           </View>
 
-
           <View style={styles.latestGrid}>
-
-            {/* OCCUPANCY */}
-
             <View style={styles.latestMetric}>
-
-              <Text style={styles.latestIcon}>
-                👥
-              </Text>
+              <Text style={styles.latestIcon}>👥</Text>
 
               <Text style={styles.latestLabel}>
                 Occupancy
@@ -753,17 +751,10 @@ export default function LiveCampusData() {
               <Text style={styles.latestValue}>
                 {latestData.occupancy.toFixed(0)}
               </Text>
-
             </View>
 
-
-            {/* ENERGY */}
-
             <View style={styles.latestMetric}>
-
-              <Text style={styles.latestIcon}>
-                ⚡
-              </Text>
+              <Text style={styles.latestIcon}>⚡</Text>
 
               <Text style={styles.latestLabel}>
                 Energy
@@ -772,184 +763,117 @@ export default function LiveCampusData() {
               <Text style={styles.latestValue}>
                 {latestData.energy.toFixed(0)}
               </Text>
-
             </View>
 
-
-            {/* TEMPERATURE */}
-
             <View style={styles.latestMetric}>
-
-              <Text style={styles.latestIcon}>
-                🌡️
-              </Text>
+              <Text style={styles.latestIcon}>🌡️</Text>
 
               <Text style={styles.latestLabel}>
-                Temperature
+                Stored temperature
               </Text>
 
               <Text style={styles.latestValue}>
                 {latestData.temperature.toFixed(1)}°C
               </Text>
-
             </View>
 
-
-            {/* HUMIDITY */}
-
             <View style={styles.latestMetric}>
-
-              <Text style={styles.latestIcon}>
-                💧
-              </Text>
+              <Text style={styles.latestIcon}>💧</Text>
 
               <Text style={styles.latestLabel}>
-                Humidity
+                Stored humidity
               </Text>
 
               <Text style={styles.latestValue}>
                 {latestData.humidity.toFixed(0)}%
               </Text>
-
             </View>
-
           </View>
 
-
           <Text style={styles.timestamp}>
-            Last updated:{' '}
+            Last saved:{' '}
             {new Date(
               latestData.timestamp
             ).toLocaleString()}
           </Text>
-
         </View>
-
       )}
 
-
-      {/* ====================================================
-          ML INFORMATION
-      ==================================================== */}
+      {/* ML PIPELINE */}
 
       <View style={styles.mlCard}>
-
         <Text style={styles.mlTitle}>
-          🧠 ML Pipeline
+          🧠 Campus Intelligence Pipeline
         </Text>
-
 
         <View style={styles.pipelineRow}>
-
           <View style={styles.pipelineCircle}>
-            <Text style={styles.pipelineIcon}>
-              📡
-            </Text>
+            <Text style={styles.pipelineIcon}>📡</Text>
           </View>
 
-          <Text style={styles.pipelineArrow}>
-            →
-          </Text>
+          <Text style={styles.pipelineArrow}>→</Text>
 
           <View style={styles.pipelineCircle}>
-            <Text style={styles.pipelineIcon}>
-              🗄️
-            </Text>
+            <Text style={styles.pipelineIcon}>🗄️</Text>
           </View>
 
-          <Text style={styles.pipelineArrow}>
-            →
-          </Text>
+          <Text style={styles.pipelineArrow}>→</Text>
 
           <View style={styles.pipelineCircle}>
-            <Text style={styles.pipelineIcon}>
-              🤖
-            </Text>
+            <Text style={styles.pipelineIcon}>🤖</Text>
           </View>
 
-          <Text style={styles.pipelineArrow}>
-            →
-          </Text>
+          <Text style={styles.pipelineArrow}>→</Text>
 
           <View style={styles.pipelineCircle}>
-            <Text style={styles.pipelineIcon}>
-              💡
-            </Text>
+            <Text style={styles.pipelineIcon}>💡</Text>
           </View>
-
         </View>
-
 
         <View style={styles.pipelineLabels}>
-
-          <Text style={styles.pipelineLabel}>
-            Sensor
-          </Text>
-
-          <Text style={styles.pipelineLabel}>
-            Database
-          </Text>
-
-          <Text style={styles.pipelineLabel}>
-            ML
-          </Text>
-
-          <Text style={styles.pipelineLabel}>
-            Decision
-          </Text>
-
+          <Text style={styles.pipelineLabel}>Data</Text>
+          <Text style={styles.pipelineLabel}>Database</Text>
+          <Text style={styles.pipelineLabel}>ML</Text>
+          <Text style={styles.pipelineLabel}>Decision</Text>
         </View>
 
-
         <Text style={styles.mlDescription}>
-          New sensor readings are stored in the
-          database and used by the ML pipeline
-          for campus analysis.
+          Stored campus readings support the existing
+          ML pipeline. Live outdoor weather is shown
+          separately and is not an indoor sensor reading.
         </Text>
-
       </View>
 
-
-      {/* ====================================================
-          REFRESH
-      ==================================================== */}
+      {/* REFRESH DATABASE */}
 
       <Pressable
         style={styles.refreshButton}
-        onPress={loadLatestData}
+        onPress={() => void loadLatestData()}
       >
-
-        <Text style={styles.refreshIcon}>
-          🔄
-        </Text>
+        <Text style={styles.refreshIcon}>🔄</Text>
 
         <Text style={styles.refreshText}>
-          Refresh Latest Data
+          Refresh Campus Data
         </Text>
-
       </Pressable>
 
-
-      {/* ====================================================
-          FOOTER
-      ==================================================== */}
+      {/* FOOTER */}
 
       <Text style={styles.footerText}>
-        Sensor values are currently simulated for
-        development and testing.
+        Weather is provided by WeatherAPI. Campus
+        readings are stored separately. Energy values
+        are not live utility-meter measurements unless
+        supplied by an actual meter.
       </Text>
-
     </ScrollView>
   );
 }
-
 
 // ============================================================
 // STYLES
 // ============================================================
 
 const styles = StyleSheet.create({
-
   container: {
     flex: 1,
     backgroundColor: '#F5F7FB',
@@ -959,11 +883,6 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 45,
   },
-
-
-  // ==========================================================
-  // LOADING
-  // ==========================================================
 
   loadingContainer: {
     flex: 1,
@@ -978,11 +897,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#374151',
   },
-
-
-  // ==========================================================
-  // HEADER
-  // ==========================================================
 
   header: {
     flexDirection: 'row',
@@ -1019,11 +933,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#6B7280',
   },
-
-
-  // ==========================================================
-  // STATUS
-  // ==========================================================
 
   statusCard: {
     flexDirection: 'row',
@@ -1066,10 +975,208 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
 
+  // Weather card
 
-  // ==========================================================
-  // INFO
-  // ==========================================================
+  weatherCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 17,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+
+  weatherHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  weatherIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  weatherIcon: {
+    fontSize: 24,
+  },
+
+  weatherHeaderText: {
+    flex: 1,
+    marginLeft: 11,
+  },
+
+  weatherTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  weatherSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#6B7280',
+  },
+
+  liveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+  },
+
+  liveDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+    marginRight: 5,
+  },
+
+  liveBadgeText: {
+    color: '#047857',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+
+  weatherLoading: {
+    minHeight: 100,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  weatherLoadingText: {
+    marginTop: 9,
+    color: '#6B7280',
+    fontSize: 12,
+  },
+
+  weatherErrorBox: {
+    paddingVertical: 20,
+  },
+
+  weatherErrorTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#991B1B',
+  },
+
+  weatherErrorText: {
+    marginTop: 5,
+    color: '#7F1D1D',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+
+  weatherRetryButton: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    backgroundColor: '#DBEAFE',
+    borderRadius: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+
+  weatherRetryText: {
+    color: '#1D4ED8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+
+  weatherMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 22,
+    paddingBottom: 18,
+  },
+
+  weatherTemperature: {
+    fontSize: 38,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  weatherCondition: {
+    marginTop: 4,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+
+  weatherBigIcon: {
+    fontSize: 47,
+  },
+
+  weatherMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    paddingTop: 15,
+  },
+
+  weatherMetric: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+
+  weatherMetricIcon: {
+    fontSize: 19,
+    marginRight: 6,
+  },
+
+  weatherMetricLabel: {
+    color: '#9CA3AF',
+    fontSize: 10,
+  },
+
+  weatherMetricValue: {
+    marginTop: 3,
+    color: '#111827',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  weatherUpdated: {
+    marginTop: 15,
+    fontSize: 10,
+    color: '#6B7280',
+  },
+
+  weatherSource: {
+    marginTop: 4,
+    fontSize: 10,
+    color: '#9CA3AF',
+  },
+
+  weatherRefreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 11,
+    paddingVertical: 12,
+    marginTop: 15,
+  },
+
+  weatherRefreshIcon: {
+    fontSize: 19,
+    color: '#2563EB',
+    marginRight: 7,
+  },
+
+  weatherRefreshText: {
+    color: '#1D4ED8',
+    fontSize: 13,
+    fontWeight: '800',
+    marginLeft: 6,
+  },
 
   infoCard: {
     flexDirection: 'row',
@@ -1093,11 +1200,6 @@ const styles = StyleSheet.create({
     color: '#374151',
   },
 
-
-  // ==========================================================
-  // FORM
-  // ==========================================================
-
   formCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -1110,7 +1212,14 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 17,
+    marginBottom: 8,
+  },
+
+  formDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#6B7280',
+    marginBottom: 18,
   },
 
   inputGroup: {
@@ -1141,11 +1250,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
 
-
-  // ==========================================================
-  // CLASS SCHEDULE
-  // ==========================================================
-
   scheduleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1157,11 +1261,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-
-  // ==========================================================
-  // SAVE
-  // ==========================================================
-
   saveButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1171,7 +1270,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
 
-  saveButtonDisabled: {
+  buttonDisabled: {
     opacity: 0.7,
   },
 
@@ -1184,12 +1283,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '800',
+    marginLeft: 8,
   },
-
-
-  // ==========================================================
-  // SUCCESS
-  // ==========================================================
 
   successCard: {
     flexDirection: 'row',
@@ -1214,11 +1309,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-
-  // ==========================================================
-  // ERROR
-  // ==========================================================
-
   errorCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1241,11 +1331,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 19,
   },
-
-
-  // ==========================================================
-  // LATEST DATA
-  // ==========================================================
 
   latestCard: {
     backgroundColor: '#FFFFFF',
@@ -1314,11 +1399,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-
-  // ==========================================================
-  // ML PIPELINE
-  // ==========================================================
-
   mlCard: {
     backgroundColor: '#111827',
     borderRadius: 16,
@@ -1379,11 +1459,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-
-  // ==========================================================
-  // REFRESH
-  // ==========================================================
-
   refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1407,11 +1482,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-
-  // ==========================================================
-  // FOOTER
-  // ==========================================================
-
   footerText: {
     marginTop: 12,
     textAlign: 'center',
@@ -1419,5 +1489,4 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 16,
   },
-
 });

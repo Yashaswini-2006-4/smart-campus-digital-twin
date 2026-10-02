@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 
-const API_URL = 'http://127.0.0.1:8000';
+const API_URL =  "http://192.168.31.98:8000";
 
 interface Recommendation {
   category: string;

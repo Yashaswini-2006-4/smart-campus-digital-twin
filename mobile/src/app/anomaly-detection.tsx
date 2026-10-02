@@ -41,7 +41,7 @@ export default function AnomalyDetection() {
       setError('');
 
       const response = await fetch(
-        'http://127.0.0.1:8000/anomaly'
+        'http://192.168.31.98:8000/anomaly'
       );
 
       if (!response.ok) {

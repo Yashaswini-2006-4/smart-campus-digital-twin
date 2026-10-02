@@ -13,7 +13,7 @@ import {
 // API URL
 // ============================================================
 
-const API_URL = 'http://127.0.0.1:8000';
+const API_URL =  "http://192.168.31.98:8000";
 
 
 // ============================================================
@@ -21,19 +21,24 @@ const API_URL = 'http://127.0.0.1:8000';
 // ============================================================
 
 interface SimulationResponse {
-  base: {
+  current: {
     occupancy: number;
     energy: number;
   };
 
-  simulation: {
-    occupancy_change: number;
-    energy_change: number;
-  };
-
-  predicted: {
+  simulated: {
     occupancy: number;
     energy: number;
+  };
+
+  changes: {
+    occupancy_percent: number;
+    energy_percent: number;
+  };
+
+  interpretation: {
+    occupancy: string;
+    energy: string;
   };
 
   model_status: string;
@@ -638,9 +643,10 @@ export default function WhatIfSimulation() {
                   </Text>
 
                   <Text style={styles.baseValue}>
-                    {result.base.occupancy.toFixed(0)}
-                  </Text>
-
+  {typeof result?.current?.occupancy === 'number'
+    ? result.current.occupancy.toFixed(0)
+    : '--'}
+</Text>
                 </View>
 
 
@@ -656,8 +662,10 @@ export default function WhatIfSimulation() {
                   </Text>
 
                   <Text style={styles.predictedValue}>
-                    {result.predicted.occupancy.toFixed(0)}
-                  </Text>
+  {typeof result?.simulated?.occupancy === 'number'
+    ? result.simulated.occupancy.toFixed(0)
+    : '--'}
+</Text>
 
                 </View>
 
@@ -666,19 +674,19 @@ export default function WhatIfSimulation() {
               <Text
                 style={[
                   styles.resultChange,
-                  result.predicted.occupancy >
-                    result.base.occupancy
+                  result.simulated.occupancy >
+                    result.current.occupancy
                     ? styles.positive
-                    : result.predicted.occupancy <
-                        result.base.occupancy
+                    : result.simulated.occupancy <
+                        result.current.occupancy
                     ? styles.negative
                     : styles.neutral,
                 ]}
               >
 
                 {formatChange(
-                  result.simulation
-                    .occupancy_change
+                  result.changes
+                    .occupancy_percent
                 )}
 
               </Text>
@@ -715,7 +723,7 @@ export default function WhatIfSimulation() {
                   </Text>
 
                   <Text style={styles.baseValue}>
-                    {result.base.energy.toFixed(0)}
+                    {result.current.energy.toFixed(0)}
                   </Text>
 
                 </View>
@@ -733,7 +741,7 @@ export default function WhatIfSimulation() {
                   </Text>
 
                   <Text style={styles.predictedValue}>
-                    {result.predicted.energy.toFixed(0)}
+                    {result.simulated.energy.toFixed(0)}
                   </Text>
 
                 </View>
@@ -744,19 +752,19 @@ export default function WhatIfSimulation() {
               <Text
                 style={[
                   styles.resultChange,
-                  result.predicted.energy >
-                    result.base.energy
+                  result.simulated.energy >
+                    result.current.energy
                     ? styles.negative
-                    : result.predicted.energy <
-                        result.base.energy
+                    : result.simulated.energy <
+                        result.current.energy
                     ? styles.positive
                     : styles.neutral,
                 ]}
               >
 
                 {formatChange(
-                  result.simulation
-                    .energy_change
+                  result.changes
+                    .energy_percent
                 )}
 
               </Text>
@@ -779,19 +787,19 @@ export default function WhatIfSimulation() {
 
             <Text style={styles.interpretationText}>
 
-              {result.simulation
-                .occupancy_change > 0
+              {result.changes
+                .occupancy_percent > 0
                 ? 'Higher occupancy has been simulated. '
-                : result.simulation
-                    .occupancy_change < 0
+                : result.changes
+                    .occupancy_percent < 0
                 ? 'Lower occupancy has been simulated. '
                 : 'Occupancy remains unchanged. '}
 
-              {result.simulation
-                .energy_change > 0
+              {result.changes
+                .energy_percent > 0
                 ? 'Energy consumption has been increased in this scenario.'
-                : result.simulation
-                    .energy_change < 0
+                : result.changes
+                    .energy_percent < 0
                 ? 'Energy consumption has been reduced in this scenario.'
                 : 'Energy consumption remains unchanged in this scenario.'}
 
