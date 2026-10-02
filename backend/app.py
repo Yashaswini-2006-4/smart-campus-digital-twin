@@ -39,6 +39,13 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:8081",
         "http://127.0.0.1:8081",
+
+        # Expo web
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
+        "http://192.168.31.98:8082",
+
+        # Older Expo web ports
         "http://localhost:19006",
         "http://127.0.0.1:19006",
     ],
@@ -46,6 +53,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Register WeatherAPI endpoints:
 # GET /environment
