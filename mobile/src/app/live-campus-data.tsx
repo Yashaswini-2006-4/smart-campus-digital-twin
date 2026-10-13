@@ -9,13 +9,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-
+import { API_BASE_URL } from '../constants/api';
 // ============================================================
 // API CONFIGURATION
 // ============================================================
 
 // For Expo Web running on this same computer:
-const API_URL =  "http://192.168.31.98:8000";
+const API_URL = API_BASE_URL;
 
 // For a physical Android phone, replace 127.0.0.1 with
 // your computer's LAN IP address, for example:

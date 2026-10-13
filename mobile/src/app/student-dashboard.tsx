@@ -221,6 +221,10 @@ export default function StudentDashboard() {
     }
   };
 
+  const openChatbot = () => {
+    router.push('/chatbot' as any);
+  };
+
   const campusStatus = health?.status || 'Data unavailable';
 
   const statusColor =
@@ -236,376 +240,394 @@ export default function StudentDashboard() {
 
   return (
     <RoleGuard allowedRole="student">
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.content}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.greeting}>Hello, Student 👋</Text>
-            <Text style={styles.subtitle}>
-              Smart Campus Dashboard
-            </Text>
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={styles.greeting}>Hello, Student 👋</Text>
+              <Text style={styles.subtitle}>
+                Smart Campus Dashboard
+              </Text>
+            </View>
+
+            <View style={styles.profileCircle}>
+              <Text style={styles.profileText}>S</Text>
+            </View>
           </View>
 
-          <View style={styles.profileCircle}>
-            <Text style={styles.profileText}>S</Text>
+          {/* Campus Status */}
+          <View style={styles.statusCard}>
+            <Text style={styles.statusTitle}>Campus Status</Text>
+
+            <View style={styles.statusRow}>
+              <View
+                style={[
+                  styles.statusDot,
+                  { backgroundColor: statusColor },
+                ]}
+              />
+
+              <Text style={styles.statusText}>
+                {loading ? 'Checking campus status...' : campusStatus}
+              </Text>
+
+              {health?.score !== undefined && (
+                <Text style={styles.statusScore}>
+                  {formatNumber(health.score, 0)}/100
+                </Text>
+              )}
+            </View>
+
+            {health?.insight ? (
+              <Text style={styles.statusInsight}>
+                {health.insight}
+              </Text>
+            ) : null}
           </View>
-        </View>
 
-        {/* Campus Status */}
-        <View style={styles.statusCard}>
-          <Text style={styles.statusTitle}>Campus Status</Text>
+          {/* Dashboard Error */}
+          {dashboardError ? (
+            <View style={styles.warningCard}>
+              <Text style={styles.warningText}>{dashboardError}</Text>
+            </View>
+          ) : null}
 
-          <View style={styles.statusRow}>
-            <View
-              style={[
-                styles.statusDot,
-                { backgroundColor: statusColor },
-              ]}
-            />
+          {/* Campus Overview */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Campus Overview</Text>
+            {loading ? <ActivityIndicator color="#2563EB" /> : null}
+          </View>
 
-            <Text style={styles.statusText}>
-              {loading ? 'Checking campus status...' : campusStatus}
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statIcon}>👥</Text>
+              <Text style={styles.statValue}>
+                {formatNumber(
+                  occupancy?.current_occupancy ?? sensor?.occupancy,
+                  0,
+                )}
+              </Text>
+              <Text style={styles.statLabel}>Occupancy</Text>
+              <Text style={styles.statCaption}>
+                {occupancy?.level || 'Current campus'}
+              </Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <Text style={styles.statIcon}>⚡</Text>
+              <Text style={styles.statValue}>
+                {formatNumber(
+                  energy?.current_energy ?? sensor?.energy,
+                  0,
+                )}
+              </Text>
+              <Text style={styles.statLabel}>Energy</Text>
+              <Text style={styles.statCaption}>Current reading</Text>
+            </View>
+          </View>
+
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statIcon}>🌡️</Text>
+              <Text style={styles.statValue}>
+                {typeof sensor?.temperature === 'number'
+                  ? `${formatNumber(sensor.temperature)}°C`
+                  : '--'}
+              </Text>
+              <Text style={styles.statLabel}>Campus Temperature</Text>
+              <Text style={styles.statCaption}>Sensor reading</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <Text style={styles.statIcon}>🏥</Text>
+              <Text style={styles.statValue}>
+                {health?.score !== undefined
+                  ? formatNumber(health.score, 0)
+                  : '--'}
+              </Text>
+              <Text style={styles.statLabel}>Campus Health</Text>
+              <Text style={styles.statCaption}>
+                {health?.status || 'Score unavailable'}
+              </Text>
+            </View>
+          </View>
+
+          {/* AI Predictions */}
+          <Text style={styles.sectionTitle}>AI Predictions</Text>
+
+          <View style={styles.predictionCard}>
+            <View style={styles.predictionHeader}>
+              <Text style={styles.predictionIcon}>👥</Text>
+              <Text style={styles.predictionTitle}>
+                Occupancy Prediction
+              </Text>
+            </View>
+
+            <Text style={styles.predictionValue}>
+              {formatNumber(occupancy?.predicted_occupancy, 1)}
             </Text>
 
-            {health?.score !== undefined && (
-              <Text style={styles.statusScore}>
-                {formatNumber(health.score, 0)}/100
+            <Text style={styles.predictionDescription}>
+              {occupancy?.insight || 'Prediction unavailable.'}
+            </Text>
+
+            <Pressable
+              style={styles.smallLink}
+              onPress={() => router.push('/occupancy-prediction')}
+            >
+              <Text style={styles.smallLinkText}>View details ›</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.predictionCard}>
+            <View style={styles.predictionHeader}>
+              <Text style={styles.predictionIcon}>⚡</Text>
+              <Text style={styles.predictionTitle}>
+                Energy Prediction
+              </Text>
+            </View>
+
+            <Text style={styles.predictionValue}>
+              {formatNumber(energy?.predicted_energy, 1)}
+            </Text>
+
+            <Text style={styles.predictionDescription}>
+              {energy?.insight || 'Prediction unavailable.'}
+            </Text>
+
+            <Pressable
+              style={styles.smallLink}
+              onPress={() => router.push('/energy-prediction')}
+            >
+              <Text style={styles.smallLinkText}>View details ›</Text>
+            </Pressable>
+          </View>
+
+          {/* Live Outdoor Weather */}
+          <Text style={styles.sectionTitle}>
+            Live Outdoor Weather 🌦️
+          </Text>
+
+          <View style={styles.weatherCard}>
+            <View style={styles.weatherHeader}>
+              <Text style={styles.weatherTitle}>Current Conditions</Text>
+
+              <Pressable
+                style={styles.refreshButton}
+                onPress={() => fetchWeather(true)}
+              >
+                <Text style={styles.refreshButtonText}>↻ Refresh</Text>
+              </Pressable>
+            </View>
+
+            {weather ? (
+              <>
+                <Text style={styles.weatherLocation}>
+                  📍 {[weather.location, weather.region]
+                    .filter(Boolean)
+                    .join(', ')}
+                </Text>
+
+                <Text style={styles.weatherTemperature}>
+                  {typeof weather.temperature_c === 'number'
+                    ? `${weather.temperature_c}°C`
+                    : '--'}
+                </Text>
+
+                <Text style={styles.weatherCondition}>
+                  {weather.condition || 'Condition unavailable'}
+                </Text>
+
+                <View style={styles.weatherDetails}>
+                  <View style={styles.weatherDetailItem}>
+                    <Text style={styles.weatherDetailIcon}>💧</Text>
+                    <Text style={styles.weatherDetailLabel}>Humidity</Text>
+                    <Text style={styles.weatherDetailValue}>
+                      {typeof weather.humidity === 'number'
+                        ? `${weather.humidity}%`
+                        : '--'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.weatherDetailItem}>
+                    <Text style={styles.weatherDetailIcon}>🌡️</Text>
+                    <Text style={styles.weatherDetailLabel}>Feels like</Text>
+                    <Text style={styles.weatherDetailValue}>
+                      {typeof weather.feels_like_c === 'number'
+                        ? `${weather.feels_like_c}°C`
+                        : '--'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.weatherDetailItem}>
+                    <Text style={styles.weatherDetailIcon}>💨</Text>
+                    <Text style={styles.weatherDetailLabel}>Wind</Text>
+                    <Text style={styles.weatherDetailValue}>
+                      {typeof weather.wind_kph === 'number'
+                        ? `${weather.wind_kph} km/h`
+                        : '--'}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.weatherSource}>
+                  Source: {weather.source || 'WeatherAPI'} · Outdoor data
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.weatherMuted}>
+                {weatherError || 'Loading live weather...'}
+              </Text>
+            )}
+
+            {weatherError && weather ? (
+              <Text style={styles.weatherWarning}>{weatherError}</Text>
+            ) : null}
+          </View>
+
+          {/* AI Recommendations */}
+          <Text style={styles.sectionTitle}>
+            AI Recommendations 🤖
+          </Text>
+
+          <View style={styles.recommendationCard}>
+            <Text style={styles.recommendationTitle}>
+              Smart Campus Insights
+            </Text>
+
+            {recommendations?.summary ? (
+              <Text style={styles.recommendationSummary}>
+                {recommendations.summary}
+              </Text>
+            ) : null}
+
+            {recommendationList.length > 0 ? (
+              recommendationList.map((item, index) => (
+                <View
+                  key={`${item.category || 'recommendation'}-${index}`}
+                  style={styles.recommendationItem}
+                >
+                  <View style={styles.recommendationItemHeader}>
+                    <Text style={styles.recommendationItemTitle}>
+                      {item.title || item.category || 'Recommendation'}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.priority,
+                        { color: priorityColor(item.priority) },
+                      ]}
+                    >
+                      {item.priority || 'Info'}
+                    </Text>
+                  </View>
+
+                  {item.message ? (
+                    <Text style={styles.recommendationText}>
+                      {item.message}
+                    </Text>
+                  ) : null}
+
+                  {item.action ? (
+                    <Text style={styles.recommendationAction}>
+                      Action: {item.action}
+                    </Text>
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.recommendationText}>
+                {loading
+                  ? 'Loading recommendations...'
+                  : 'No recommendations are available. Check campus sensor data.'}
               </Text>
             )}
           </View>
 
-          {health?.insight ? (
-            <Text style={styles.statusInsight}>
-              {health.insight}
-            </Text>
-          ) : null}
-        </View>
-
-        {/* Dashboard error */}
-        {dashboardError ? (
-          <View style={styles.warningCard}>
-            <Text style={styles.warningText}>{dashboardError}</Text>
-          </View>
-        ) : null}
-
-        {/* Campus Overview */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Campus Overview</Text>
-
-          {loading ? (
-            <ActivityIndicator color="#2563EB" />
-          ) : null}
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>👥</Text>
-            <Text style={styles.statValue}>
-              {formatNumber(
-                occupancy?.current_occupancy ?? sensor?.occupancy,
-                0,
-              )}
-            </Text>
-            <Text style={styles.statLabel}>Occupancy</Text>
-            <Text style={styles.statCaption}>
-              {occupancy?.level || 'Current campus'}
-            </Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>⚡</Text>
-            <Text style={styles.statValue}>
-              {formatNumber(
-                energy?.current_energy ?? sensor?.energy,
-                0,
-              )}
-            </Text>
-            <Text style={styles.statLabel}>Energy</Text>
-            <Text style={styles.statCaption}>Current reading</Text>
-          </View>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>🌡️</Text>
-            <Text style={styles.statValue}>
-              {typeof sensor?.temperature === 'number'
-                ? `${formatNumber(sensor.temperature)}°C`
-                : '--'}
-            </Text>
-            <Text style={styles.statLabel}>Campus Temperature</Text>
-            <Text style={styles.statCaption}>Sensor reading</Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={styles.statIcon}>🏥</Text>
-            <Text style={styles.statValue}>
-              {health?.score !== undefined
-                ? `${formatNumber(health.score, 0)}`
-                : '--'}
-            </Text>
-            <Text style={styles.statLabel}>Campus Health</Text>
-            <Text style={styles.statCaption}>
-              {health?.status || 'Score unavailable'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Predictions summary */}
-        <Text style={styles.sectionTitle}>AI Predictions</Text>
-
-        <View style={styles.predictionCard}>
-          <View style={styles.predictionHeader}>
-            <Text style={styles.predictionIcon}>👥</Text>
-            <Text style={styles.predictionTitle}>
-              Occupancy Prediction
-            </Text>
-          </View>
-
-          <Text style={styles.predictionValue}>
-            {formatNumber(occupancy?.predicted_occupancy, 1)}
-          </Text>
-
-          <Text style={styles.predictionDescription}>
-            {occupancy?.insight || 'Prediction unavailable.'}
-          </Text>
+          {/* Campus Features */}
+          <Text style={styles.sectionTitle}>Campus Features</Text>
 
           <Pressable
-            style={styles.smallLink}
-            onPress={() => router.push('/occupancy-prediction')}
+            style={styles.featureCard}
+            onPress={() => router.push('/anomaly-detection')}
           >
-            <Text style={styles.smallLinkText}>View details ›</Text>
+            <View style={styles.featureIconBox}>
+              <Text style={styles.featureIcon}>🔎</Text>
+            </View>
+
+            <View style={styles.featureTextBox}>
+              <Text style={styles.featureTitle}>Anomaly Detection</Text>
+              <Text style={styles.featureDescription}>
+                View unusual campus sensor patterns.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
           </Pressable>
-        </View>
-
-        <View style={styles.predictionCard}>
-          <View style={styles.predictionHeader}>
-            <Text style={styles.predictionIcon}>⚡</Text>
-            <Text style={styles.predictionTitle}>
-              Energy Prediction
-            </Text>
-          </View>
-
-          <Text style={styles.predictionValue}>
-            {formatNumber(energy?.predicted_energy, 1)}
-          </Text>
-
-          <Text style={styles.predictionDescription}>
-            {energy?.insight || 'Prediction unavailable.'}
-          </Text>
 
           <Pressable
-            style={styles.smallLink}
-            onPress={() => router.push('/energy-prediction')}
+            style={styles.featureCard}
+            onPress={() => router.push('/campus-health-score')}
           >
-            <Text style={styles.smallLinkText}>View details ›</Text>
+            <View style={styles.featureIconBox}>
+              <Text style={styles.featureIcon}>🏥</Text>
+            </View>
+
+            <View style={styles.featureTextBox}>
+              <Text style={styles.featureTitle}>Campus Health Score</Text>
+              <Text style={styles.featureDescription}>
+                View campus health and component scores.
+              </Text>
+            </View>
+
+            <Text style={styles.arrow}>›</Text>
           </Pressable>
-        </View>
 
-        {/* Live Outdoor Weather */}
-        <Text style={styles.sectionTitle}>
-          Live Outdoor Weather 🌦️
-        </Text>
-
-        <View style={styles.weatherCard}>
-          <View style={styles.weatherHeader}>
-            <Text style={styles.weatherTitle}>Current Conditions</Text>
-
-            <Pressable
-              style={styles.refreshButton}
-              onPress={() => fetchWeather(true)}
-            >
-              <Text style={styles.refreshButtonText}>↻ Refresh</Text>
-            </Pressable>
-          </View>
-
-          {weather ? (
-            <>
-              <Text style={styles.weatherLocation}>
-                📍 {[weather.location, weather.region]
-                  .filter(Boolean)
-                  .join(', ')}
-              </Text>
-
-              <Text style={styles.weatherTemperature}>
-                {typeof weather.temperature_c === 'number'
-                  ? `${weather.temperature_c}°C`
-                  : '--'}
-              </Text>
-
-              <Text style={styles.weatherCondition}>
-                {weather.condition || 'Condition unavailable'}
-              </Text>
-
-              <View style={styles.weatherDetails}>
-                <View style={styles.weatherDetailItem}>
-                  <Text style={styles.weatherDetailIcon}>💧</Text>
-                  <Text style={styles.weatherDetailLabel}>Humidity</Text>
-                  <Text style={styles.weatherDetailValue}>
-                    {typeof weather.humidity === 'number'
-                      ? `${weather.humidity}%`
-                      : '--'}
-                  </Text>
-                </View>
-
-                <View style={styles.weatherDetailItem}>
-                  <Text style={styles.weatherDetailIcon}>🌡️</Text>
-                  <Text style={styles.weatherDetailLabel}>Feels like</Text>
-                  <Text style={styles.weatherDetailValue}>
-                    {typeof weather.feels_like_c === 'number'
-                      ? `${weather.feels_like_c}°C`
-                      : '--'}
-                  </Text>
-                </View>
-
-                <View style={styles.weatherDetailItem}>
-                  <Text style={styles.weatherDetailIcon}>💨</Text>
-                  <Text style={styles.weatherDetailLabel}>Wind</Text>
-                  <Text style={styles.weatherDetailValue}>
-                    {typeof weather.wind_kph === 'number'
-                      ? `${weather.wind_kph} km/h`
-                      : '--'}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.weatherSource}>
-                Source: {weather.source || 'WeatherAPI'} · Outdoor data
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.weatherMuted}>
-              {weatherError || 'Loading live weather...'}
+          {/* Refresh Dashboard */}
+          <Pressable
+            style={[
+              styles.dashboardRefreshButton,
+              refreshing && styles.buttonDisabled,
+            ]}
+            onPress={handleRefresh}
+            disabled={refreshing}
+          >
+            <Text style={styles.dashboardRefreshText}>
+              {refreshing ? 'Refreshing Dashboard...' : 'Refresh Dashboard'}
             </Text>
-          )}
+          </Pressable>
 
-          {weatherError && weather ? (
-            <Text style={styles.weatherWarning}>{weatherError}</Text>
-          ) : null}
-        </View>
+          {/* Logout */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.logoutButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutText}>Logout</Text>
+          </Pressable>
+        </ScrollView>
 
-        {/* AI Recommendations */}
-        <Text style={styles.sectionTitle}>
-          AI Recommendations 🤖
-        </Text>
-
-        <View style={styles.recommendationCard}>
-          <Text style={styles.recommendationTitle}>
-            Smart Campus Insights
-          </Text>
-
-          {recommendations?.summary ? (
-            <Text style={styles.recommendationSummary}>
-              {recommendations.summary}
-            </Text>
-          ) : null}
-
-          {recommendationList.length > 0 ? (
-            recommendationList.map((item, index) => (
-              <View
-                key={`${item.category || 'recommendation'}-${index}`}
-                style={styles.recommendationItem}
-              >
-                <View style={styles.recommendationItemHeader}>
-                  <Text style={styles.recommendationItemTitle}>
-                    {item.title || item.category || 'Recommendation'}
-                  </Text>
-
-                  <Text
-                    style={[
-                      styles.priority,
-                      { color: priorityColor(item.priority) },
-                    ]}
-                  >
-                    {item.priority || 'Info'}
-                  </Text>
-                </View>
-
-                {item.message ? (
-                  <Text style={styles.recommendationText}>
-                    {item.message}
-                  </Text>
-                ) : null}
-
-                {item.action ? (
-                  <Text style={styles.recommendationAction}>
-                    Action: {item.action}
-                  </Text>
-                ) : null}
-              </View>
-            ))
-          ) : (
-            <Text style={styles.recommendationText}>
-              {loading
-                ? 'Loading recommendations...'
-                : 'No recommendations are available. Check campus sensor data.'}
-            </Text>
-          )}
-        </View>
-
-        {/* Additional Features */}
-        <Text style={styles.sectionTitle}>Campus Features</Text>
-
+        {/* Floating Chatbot Button */}
         <Pressable
-          style={styles.featureCard}
-          onPress={() => router.push('/anomaly-detection')}
-        >
-          <View style={styles.featureIconBox}>
-            <Text style={styles.featureIcon}>🔎</Text>
-          </View>
-          <View style={styles.featureTextBox}>
-            <Text style={styles.featureTitle}>Anomaly Detection</Text>
-            <Text style={styles.featureDescription}>
-              View unusual campus sensor patterns.
-            </Text>
-          </View>
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.featureCard}
-          onPress={() => router.push('/campus-health-score')}
-        >
-          <View style={styles.featureIconBox}>
-            <Text style={styles.featureIcon}>🏥</Text>
-          </View>
-          <View style={styles.featureTextBox}>
-            <Text style={styles.featureTitle}>Campus Health Score</Text>
-            <Text style={styles.featureDescription}>
-              View campus health and component scores.
-            </Text>
-          </View>
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
-
-        {/* Refresh dashboard */}
-        <Pressable
-          style={[
-            styles.dashboardRefreshButton,
-            refreshing && styles.buttonDisabled,
-          ]}
-          onPress={handleRefresh}
-          disabled={refreshing}
-        >
-          <Text style={styles.dashboardRefreshText}>
-            {refreshing ? 'Refreshing Dashboard...' : 'Refresh Dashboard'}
-          </Text>
-        </Pressable>
-
-        {/* Logout */}
-        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Campus Assistant chatbot"
+          onPress={openChatbot}
           style={({ pressed }) => [
-            styles.logoutButton,
-            pressed && styles.buttonPressed,
+            styles.chatbotButton,
+            pressed && styles.chatbotButtonPressed,
           ]}
-          onPress={handleLogout}
         >
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.chatbotButtonIcon}>💬</Text>
+          <Text style={styles.chatbotButtonLabel}>Chat</Text>
         </Pressable>
-      </ScrollView>
+      </View>
     </RoleGuard>
   );
 }
@@ -615,9 +637,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F7FB',
   },
+  scrollView: {
+    flex: 1,
+  },
   content: {
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   header: {
     flexDirection: 'row',
@@ -998,5 +1023,39 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: 'bold',
+  },
+
+  /* Floating chatbot button */
+  chatbotButton: {
+    position: 'absolute',
+    right: 20,
+    bottom: 24,
+    minWidth: 64,
+    height: 58,
+    paddingHorizontal: 16,
+    borderRadius: 29,
+    backgroundColor: '#173B70',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    zIndex: 1000,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+  },
+  chatbotButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.97 }],
+  },
+  chatbotButtonIcon: {
+    fontSize: 21,
+    marginRight: 7,
+  },
+  chatbotButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
