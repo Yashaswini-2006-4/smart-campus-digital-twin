@@ -14,14 +14,13 @@ import {
   View,
 } from 'react-native';
 
+import { AI_API_URL } from '../constants/api';
 import { router } from 'expo-router';
+import { API_BASE_URL } from '../constants/api';
 
 // Web runs in your PC browser.
-// Android/iOS uses your PC's LAN IP.
-const API_URL =
-  Platform.OS === 'web'
-    ?  "http://192.168.31.98:8000"
-    : 'http://192.168.31.98:8000';
+// Android/iOS uses your PC's LAN IP
+const API_URL = API_BASE_URL;
 
 interface HealthResponse {
   score: number;
