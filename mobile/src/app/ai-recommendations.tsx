@@ -8,8 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { AI_API_URL } from '../constants/api';
 
-const API_URL =  "http://192.168.31.98:8000";
+const API_URL = AI_API_URL;
 
 interface Recommendation {
   category: string;
@@ -142,7 +143,7 @@ export default function AIRecommendations() {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorIcon}>⚠️</Text>
+        <Text style={styles.errorIcon}>âš ï¸</Text>
 
         <Text style={styles.errorTitle}>
           Connection Error
@@ -202,7 +203,7 @@ export default function AIRecommendations() {
       <View style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
           <View style={styles.summaryIcon}>
-            <Text style={styles.summaryIconText}>✦</Text>
+            <Text style={styles.summaryIconText}>âœ¦</Text>
           </View>
 
           <Text style={styles.summaryTitle}>
@@ -230,7 +231,7 @@ export default function AIRecommendations() {
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>👥</Text>
+          <Text style={styles.metricIcon}>ðŸ‘¥</Text>
 
           <Text style={styles.metricLabel}>
             Occupancy
@@ -246,7 +247,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>⚡</Text>
+          <Text style={styles.metricIcon}>âš¡</Text>
 
           <Text style={styles.metricLabel}>
             Energy
@@ -262,7 +263,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>🚨</Text>
+          <Text style={styles.metricIcon}>ðŸš¨</Text>
 
           <Text style={styles.metricLabel}>
             Anomaly Risk
@@ -281,7 +282,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>❤️</Text>
+          <Text style={styles.metricIcon}>â¤ï¸</Text>
 
           <Text style={styles.metricLabel}>
             Campus Health
@@ -304,7 +305,7 @@ export default function AIRecommendations() {
 
       {data.recommendations.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyIcon}>✅</Text>
+          <Text style={styles.emptyIcon}>âœ…</Text>
 
           <Text style={styles.emptyTitle}>
             No Immediate Actions
@@ -405,7 +406,7 @@ export default function AIRecommendations() {
         onPress={fetchRecommendations}
       >
         <Text style={styles.refreshButtonText}>
-          ↻  Refresh AI Analysis
+          â†»  Refresh AI Analysis
         </Text>
       </Pressable>
 

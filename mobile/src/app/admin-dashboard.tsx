@@ -588,6 +588,60 @@ export default function AdminDashboard() {
           }
         />
 
+        {/* Campus Management */}
+        <Text style={styles.sectionTitle}>
+          Campus Management
+        </Text>
+
+        <FeatureCard
+          icon="🏢"
+          title="Buildings"
+          description="View and manage campus buildings."
+          onPress={() => router.push('/buildings')}
+        />
+
+        <FeatureCard
+          icon="🏫"
+          title="Departments"
+          description="View and manage campus departments."
+          onPress={() => router.push('/departments')}
+        />
+
+        <FeatureCard
+          icon="🚪"
+          title="Rooms"
+          description="View and manage classrooms, labs and room status."
+          onPress={() => router.push('/rooms')}
+        />
+
+        <FeatureCard
+          icon="🧰"
+          title="Facilities"
+          description="View and manage campus facilities."
+          onPress={() => router.push('/facilities')}
+        />
+
+        <FeatureCard
+          icon="📋"
+          title="Complaints"
+          description="Review and track campus complaints."
+          onPress={() => router.push('/complaints')}
+        />
+
+        <FeatureCard
+          icon="🔧"
+          title="Maintenance Tasks"
+          description="Review maintenance tasks and their status."
+          onPress={() => router.push('/maintenance-tasks')}
+        />
+
+        <FeatureCard
+          icon="🏙️"
+          title="Digital Twin"
+          description="Explore campus buildings, rooms and facilities in the digital twin."
+          onPress={() => router.push('/digital-twin')}
+        />
+
         {/* Refresh */}
         <Pressable
           style={({ pressed }) => [

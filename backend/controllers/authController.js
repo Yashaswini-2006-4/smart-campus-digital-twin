@@ -123,7 +123,60 @@ const login = async (req, res) => {
   }
 };
 
+// Select role for the current demo session
+const selectRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+
+    const allowedRoles = [
+      "student",
+      "faculty",
+      "admin",
+      "maintenance",
+    ];
+
+    if (!role || !allowedRoles.includes(role)) {
+      return res.status(400).json({
+        message: "Invalid role selected",
+      });
+    }
+
+    // JWT secret must be configured
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+
+      return res.status(500).json({
+        message: "Authentication configuration error",
+      });
+    }
+
+    // Create a new session token with the selected role
+    const token = jwt.sign(
+      {
+        userId: req.user.userId,
+        role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    res.status(200).json({
+      message: "Role selected successfully",
+      token,
+      role,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Server error",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
+  selectRole,
 };

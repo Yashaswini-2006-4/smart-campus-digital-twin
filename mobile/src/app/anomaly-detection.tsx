@@ -8,6 +8,10 @@ import {
   View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { AI_API_URL } from '../constants/api';
+import { API_BASE_URL } from '../constants/api';
+
+const API_URL = API_BASE_URL;
 
 interface SensorData {
   occupancy: number;
@@ -41,7 +45,7 @@ export default function AnomalyDetection() {
       setError('');
 
       const response = await fetch(
-        'http://192.168.31.98:8000/anomaly'
+        `${AI_API_URL}/anomaly`
       );
 
       if (!response.ok) {
@@ -93,14 +97,14 @@ export default function AnomalyDetection() {
           style={styles.backButton}
         >
           <Text style={styles.backText}>
-            ‹
+            â€¹
           </Text>
         </Pressable>
 
         <View style={styles.headerContent}>
 
           <Text style={styles.title}>
-            Anomaly Detection 🚨
+            Anomaly Detection ðŸš¨
           </Text>
 
           <Text style={styles.subtitle}>
@@ -136,7 +140,7 @@ export default function AnomalyDetection() {
           <View style={styles.errorContainer}>
 
             <Text style={styles.errorIcon}>
-              ⚠️
+              âš ï¸
             </Text>
 
             <Text style={styles.errorTitle}>
@@ -163,7 +167,7 @@ export default function AnomalyDetection() {
           <>
 
             <Text style={styles.statusIcon}>
-              {isAnomaly ? '⚠️' : '✓'}
+              {isAnomaly ? 'âš ï¸' : 'âœ“'}
             </Text>
 
             <Text
@@ -221,7 +225,7 @@ export default function AnomalyDetection() {
               <View style={styles.sensorCard}>
 
                 <Text style={styles.sensorIcon}>
-                  👥
+                  ðŸ‘¥
                 </Text>
 
                 <Text style={styles.sensorValue}>
@@ -238,7 +242,7 @@ export default function AnomalyDetection() {
               <View style={styles.sensorCard}>
 
                 <Text style={styles.sensorIcon}>
-                  ⚡
+                  âš¡
                 </Text>
 
                 <Text style={styles.sensorValue}>
@@ -255,11 +259,11 @@ export default function AnomalyDetection() {
               <View style={styles.sensorCard}>
 
                 <Text style={styles.sensorIcon}>
-                  🌡️
+                  ðŸŒ¡ï¸
                 </Text>
 
                 <Text style={styles.sensorValue}>
-                  {data.sensor_data.temperature}°C
+                  {data.sensor_data.temperature}Â°C
                 </Text>
 
                 <Text style={styles.sensorLabel}>
@@ -272,7 +276,7 @@ export default function AnomalyDetection() {
               <View style={styles.sensorCard}>
 
                 <Text style={styles.sensorIcon}>
-                  💧
+                  ðŸ’§
                 </Text>
 
                 <Text style={styles.sensorValue}>
@@ -312,7 +316,7 @@ export default function AnomalyDetection() {
             <View style={styles.analysisCard}>
 
               <Text style={styles.analysisTitle}>
-                ML Analysis 🤖
+                ML Analysis ðŸ¤–
               </Text>
 
               <Text style={styles.analysisText}>
