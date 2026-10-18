@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from maintenance_routes import router as maintenance_router
+from rag_chatbot import router as rag_router
 
 from database import (
     initialize_database,
@@ -63,6 +64,7 @@ app.add_middleware(
 app.include_router(weather_router)
 app.include_router(occupancy_router)
 app.include_router(maintenance_router)
+app.include_router(rag_router)
 
 
 # ============================================================
