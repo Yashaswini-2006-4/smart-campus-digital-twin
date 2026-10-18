@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import React from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -9,6 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
+
+import { NODE_API_URL } from '../constants/api';
 
 type Role = 'student' | 'faculty' | 'admin' | 'maintenance';
 
@@ -45,9 +48,52 @@ const roles: {
 ];
 
 export default function RoleSelection() {
+  const [loadingRole, setLoadingRole] = React.useState<Role | null>(null);
+
   const selectRole = async (role: Role) => {
     try {
+      setLoadingRole(role);
+
+      const token = await AsyncStorage.getItem('token');
+
+      if (!token) {
+        Alert.alert(
+          'Session Expired',
+          'Please log in again.',
+        );
+
+        router.replace('/login');
+        return;
+      }
+
+      const response = await fetch(
+        `${NODE_API_URL}/api/auth/select-role`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            role,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || 'Unable to select role',
+        );
+      }
+
+      // Store the new JWT containing the selected role
+      await AsyncStorage.setItem('token', data.token);
+
+      // Keep the selected role for frontend dashboard guards
       await AsyncStorage.setItem('userRole', role);
+
       await AsyncStorage.setItem('isLoggedIn', 'true');
 
       switch (role) {
@@ -68,8 +114,16 @@ export default function RoleSelection() {
           break;
       }
     } catch (error) {
-      console.error('Error saving role:', error);
-      Alert.alert('Error', 'Unable to save your role. Please try again.');
+      console.error('Role selection error:', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to select role.';
+
+      Alert.alert('Role Selection Failed', message);
+    } finally {
+      setLoadingRole(null);
     }
   };
 
@@ -84,28 +138,45 @@ export default function RoleSelection() {
       </View>
 
       <View style={styles.rolesContainer}>
-        {roles.map((item) => (
-          <Pressable
-            key={item.role}
-            style={({ pressed }) => [
-              styles.roleCard,
-              pressed && styles.roleCardPressed,
-            ]}
-            onPress={() => selectRole(item.role)}
-          >
-            <Text style={styles.icon}>{item.icon}</Text>
+        {roles.map((item) => {
+          const isLoading = loadingRole === item.role;
 
-            <View style={styles.roleContent}>
-              <Text style={styles.roleTitle}>{item.title}</Text>
+          return (
+            <Pressable
+              key={item.role}
+              disabled={loadingRole !== null}
+              style={({ pressed }) => [
+                styles.roleCard,
+                pressed && styles.roleCardPressed,
+                loadingRole !== null &&
+                  !isLoading &&
+                  styles.roleCardDisabled,
+              ]}
+              onPress={() => selectRole(item.role)}
+            >
+              <Text style={styles.icon}>{item.icon}</Text>
 
-              <Text style={styles.roleDescription}>
-                {item.description}
-              </Text>
-            </View>
+              <View style={styles.roleContent}>
+                <Text style={styles.roleTitle}>
+                  {item.title}
+                </Text>
 
-            <Text style={styles.arrow}>›</Text>
-          </Pressable>
-        ))}
+                <Text style={styles.roleDescription}>
+                  {item.description}
+                </Text>
+              </View>
+
+              {isLoading ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#2563EB"
+                />
+              ) : (
+                <Text style={styles.arrow}>›</Text>
+              )}
+            </Pressable>
+          );
+        })}
       </View>
     </ScrollView>
   );
@@ -169,6 +240,10 @@ const styles = StyleSheet.create({
   roleCardPressed: {
     opacity: 0.7,
     transform: [{ scale: 0.98 }],
+  },
+
+  roleCardDisabled: {
+    opacity: 0.6,
   },
 
   icon: {

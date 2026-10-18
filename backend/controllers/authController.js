@@ -1,21 +1,37 @@
+
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Register a new user
+const ALLOWED_ROLES = new Set([
+  "student",
+  "faculty",
+  "admin",
+  "maintenance",
+]);
+
+// Register a new user.
+// Public registration creates student accounts only.
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
 
-    // Check required fields
-    if (!name || !email || !password) {
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
       return res.status(400).json({
         message: "Name, email and password are required",
       });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({
+      email: email.trim(),
+    });
 
     if (existingUser) {
       return res.status(400).json({
@@ -23,18 +39,16 @@ const register = async (req, res) => {
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Public registration always creates a student account
     const user = await User.create({
-      name,
-      email,
+      name: name.trim(),
+      email: email.trim(),
       password: hashedPassword,
       role: "student",
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "User registered successfully",
       user: {
         id: user._id,
@@ -44,26 +58,30 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Registration failed:", error);
+
+    return res.status(500).json({
       message: "Server error",
-      error: error.message,
     });
   }
 };
 
-// Login user
+// Login using the account's actual database role.
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
-    // Check required fields
-    if (!email || !password) {
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
       return res.status(400).json({
         message: "Email and password are required",
       });
     }
 
-    // Check JWT configuration
     if (!process.env.JWT_SECRET) {
       console.error("JWT_SECRET is not configured");
 
@@ -72,8 +90,9 @@ const login = async (req, res) => {
       });
     }
 
-    // Find user
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      email: email.trim(),
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -81,7 +100,6 @@ const login = async (req, res) => {
       });
     }
 
-    // Check password
     const isPasswordCorrect = await bcrypt.compare(
       password,
       user.password
@@ -93,11 +111,20 @@ const login = async (req, res) => {
       });
     }
 
-    // Create JWT token
+    const assignedRole = String(user.role || "")
+      .trim()
+      .toLowerCase();
+
+    if (!ALLOWED_ROLES.has(assignedRole)) {
+      return res.status(403).json({
+        message: "No valid role is assigned to this account",
+      });
+    }
+
     const token = jwt.sign(
       {
-        userId: user._id,
-        role: user.role,
+        userId: String(user._id),
+        role: assignedRole,
       },
       process.env.JWT_SECRET,
       {
@@ -105,20 +132,85 @@ const login = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Login successful",
       token,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role,
+        role: assignedRole,
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Login failed:", error);
+
+    return res.status(500).json({
       message: "Server error",
-      error: error.message,
+    });
+  }
+};
+
+// Select a role only when it matches the role assigned
+// to the authenticated user's database account.
+const selectRole = async (req, res) => {
+  try {
+    const requestedRole =
+      typeof req.body?.role === "string"
+        ? req.body.role.trim().toLowerCase()
+        : "";
+
+    if (!ALLOWED_ROLES.has(requestedRole)) {
+      return res.status(400).json({
+        message: "Invalid role selected",
+      });
+    }
+
+    if (!process.env.JWT_SECRET) {
+      console.error("JWT_SECRET is not configured");
+
+      return res.status(500).json({
+        message: "Authentication configuration error",
+      });
+    }
+
+    // protect middleware loads this role from the database.
+    const assignedRole = req.user?.role;
+
+    if (!ALLOWED_ROLES.has(assignedRole)) {
+      return res.status(403).json({
+        message: "No valid role is assigned to this account",
+      });
+    }
+
+    if (requestedRole !== assignedRole) {
+      return res.status(403).json({
+        message:
+          "You can only select the role assigned to your account. Contact your administrator if your role is incorrect.",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        userId: String(req.user.userId),
+        role: assignedRole,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    return res.status(200).json({
+      message: "Role selected successfully",
+      token,
+      role: assignedRole,
+    });
+  } catch (error) {
+    console.error("Role selection failed:", error);
+
+    return res.status(500).json({
+      message: "Server error",
     });
   }
 };
@@ -126,4 +218,5 @@ const login = async (req, res) => {
 module.exports = {
   register,
   login,
+  selectRole,
 };

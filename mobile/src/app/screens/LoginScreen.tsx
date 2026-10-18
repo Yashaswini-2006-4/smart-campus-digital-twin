@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { router } from 'expo-router';
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -11,22 +12,68 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+import { NODE_API_URL } from '../../constants/api';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-  if (!email || !password) {
-    Alert.alert(
-      'Missing Information',
-      'Please enter email and password.'
-    );
-    return;
-  }
+  const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      Alert.alert(
+        'Missing Information',
+        'Please enter email and password.',
+      );
+      return;
+    }
 
-  router.push('/role-selection');
-};
+    try {
+      setLoading(true);
+
+      const response = await fetch(`${NODE_API_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Login failed');
+      }
+
+      // Store JWT for protected Node backend APIs
+      await AsyncStorage.setItem('token', data.token);
+
+      // Store logged-in user information
+      await AsyncStorage.setItem('user', JSON.stringify(data.user));
+
+      // Keep the existing role-selection flow
+      await AsyncStorage.setItem('isLoggedIn', 'true');
+
+      router.push('/role-selection');
+    } catch (error) {
+      console.error('Login error:', error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to connect to the backend.';
+
+      Alert.alert('Login Failed', message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -59,6 +106,7 @@ export default function LoginScreen() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
           />
 
           <Text style={styles.label}>Password</Text>
@@ -70,10 +118,23 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
           />
 
-          <Pressable style={styles.loginButton} onPress={handleLogin}>
-            <Text style={styles.loginText}>Login</Text>
+          <Pressable
+            style={[
+              styles.loginButton,
+              loading && styles.loginButtonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.loginText}>Login</Text>
+            )}
           </Pressable>
 
           <Text style={styles.info}>
@@ -170,6 +231,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 4,
+  },
+
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
 
   loginText: {
