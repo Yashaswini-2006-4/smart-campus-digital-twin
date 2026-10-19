@@ -1,0 +1,162 @@
+
+{
+  "college": "Navkis College of Engineering, Hassan",
+  "department": "Computer Science and Engineering",
+  "branch": "CSE",
+  "semester": "VII",
+  "section": "B",
+  "term": "Odd Semester 2026-27",
+  "class_teacher": "Mr. Nabi M",
+  "semester_commencement": "2026-07-20",
+  "last_working_day": "2026-11-09",
+  "source": "Timetable image supplied by the user",
+  "transcription_note": "The schedule was transcribed from the supplied image. Verify lab details, merged time cells, room numbers, and difficult-to-read faculty names against the original timetable before relying on them for official notices.",
+  "time_slots": [
+    {"start": "10:00", "end": "10:50"},
+    {"start": "10:50", "end": "11:40"},
+    {"start": "11:40", "end": "11:50"},
+    {"start": "11:50", "end": "12:40"},
+    {"start": "12:40", "end": "13:30"},
+    {"start": "13:30", "end": "14:25"},
+    {"start": "14:25", "end": "15:15"},
+    {"start": "15:15", "end": "16:05"},
+    {"start": "16:05", "end": "16:55"}
+  ],
+  "courses": [
+    {
+      "code": "BCS701",
+      "title": "Internet of Things",
+      "type": "IPCC",
+      "credits_pattern": "L3, T0, P2",
+      "faculty": ["Dr. Nandeesh G. S"],
+      "aliases": ["IOT", "Internet of Things"]
+    },
+    {
+      "code": "BCS702",
+      "title": "Parallel Computing",
+      "type": "IPCC",
+      "credits_pattern": "L3, T0, P2",
+      "faculty": ["Mr. Nabi M"],
+      "aliases": ["parallel computing"]
+    },
+    {
+      "code": "BCS703",
+      "title": "Cryptography and Network Security",
+      "type": "PCC",
+      "credits_pattern": "L4, T0, P0",
+      "faculty": ["Ms. Shruthi"],
+      "aliases": [
+        "cryptography",
+        "network security",
+        "cryptography and network security"
+      ]
+    },
+    {
+      "code": "BCS714D",
+      "title": "Big Data Analytics",
+      "type": "PCC",
+      "credits_pattern": "L4, T0, P0",
+      "faculty": ["Dr. Najmuddi​​n Aamer"],
+      "aliases": ["big data", "big data analytics"]
+    },
+    {
+      "code": "BCV755B",
+      "title": "Conservation of Natural Resources",
+      "type": "OEC",
+      "credits_pattern": "L3, T0, P0",
+      "faculty": ["Mr. Theju K R"],
+      "aliases": [
+        "conservation",
+        "natural resources",
+        "conservation of natural resources"
+      ]
+    },
+    {
+      "code": "BCS786",
+      "title": "Major Project Phase-II",
+      "type": "Project",
+      "faculty": [
+        "Dr. Kavitha A. S.",
+        "Dr. Tabasum Guldegudd"
+      ],
+      "faculty_needs_verification": true,
+      "aliases": [
+        "major project",
+        "project phase two",
+        "project phase ii"
+      ]
+    }
+  ],
+  "schedule": [
+    {
+      "day": "Monday",
+      "sessions": [
+        {"start": "10:00", "end": "10:50", "course_code": "BCV755B", "room": "A-213"},
+        {"start": "10:50", "end": "11:40", "course_code": "BCS714D", "room": "A-213"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "12:40", "course_code": "BCS701", "room": "A-209"},
+        {"start": "12:40", "end": "13:30", "course_code": "BCS703", "room": "A-209"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "15:15", "course_code": "BCS702", "room": "A-205"},
+        {"start": "15:15", "end": "16:55", "course_code": "BCS702 LAB", "room": "Lab-1", "note": "Faculty initials on image: NM + CH"}
+      ]
+    },
+    {
+      "day": "Tuesday",
+      "sessions": [
+        {"start": "10:00", "end": "10:50", "course_code": "BCS702", "room": "A-205"},
+        {"start": "10:50", "end": "11:40", "course_code": "BCS703", "room": "A-205"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "13:30", "activity": "TAP", "room": "A-207"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "15:15", "activity": "Mentoring"},
+        {"start": "15:15", "end": "16:05", "course_code": "BCS714D", "room": "A-211"},
+        {"start": "16:05", "end": "16:55", "course_code": "BCV755B", "room": "A-211"}
+      ]
+    },
+    {
+      "day": "Wednesday",
+      "sessions": [
+        {"start": "10:00", "end": "10:50", "course_code": "BCS701", "room": "A-207"},
+        {"start": "10:50", "end": "11:40", "course_code": "BCS701", "room": "A-207"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "12:40", "activity": "Library"},
+        {"start": "12:40", "end": "13:30", "course_code": "BCV755B", "room": "A-211"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "15:15", "course_code": "BCS714D", "room": "A-213"},
+        {"start": "15:15", "end": "16:55", "course_code": "BCS786"}
+      ]
+    },
+    {
+      "day": "Thursday",
+      "sessions": [
+        {"start": "10:00", "end": "11:40", "course_code": "BCS786"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "13:30", "course_code": "BCS701 LAB", "room": "New Lab-1", "note": "Faculty initials on image: NG + PS"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "15:15", "course_code": "BCS702", "room": "A-411"},
+        {"start": "15:15", "end": "16:55", "course_code": "BCS701", "room": "A-411"}
+      ]
+    },
+    {
+      "day": "Friday",
+      "sessions": [
+        {"start": "10:00", "end": "11:40", "course_code": "BCS786"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "13:30", "course_code": "BCS786"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "16:55", "course_code": "BCS786"}
+      ]
+    },
+    {
+      "day": "Saturday",
+      "sessions": [
+        {"start": "10:00", "end": "11:40", "activity": "SAW activities"},
+        {"start": "11:40", "end": "11:50", "activity": "Short break"},
+        {"start": "11:50", "end": "13:30", "activity": "SAW activities"},
+        {"start": "13:30", "end": "14:25", "activity": "Lunch break"},
+        {"start": "14:25", "end": "16:55", "activity": "SAW activities"}
+      ]
+    }
+  ]
+}
