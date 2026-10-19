@@ -1,15 +1,18 @@
+
+import os
 from pathlib import Path
 from datetime import datetime
-from occupancy_routes import router as occupancy_router
 
 import joblib
 import pandas as pd
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+from occupancy_routes import router as occupancy_router
 from maintenance_routes import router as maintenance_router
 from rag_chatbot import router as rag_router
+from weather_service import router as weather_router
 
 from database import (
     initialize_database,
@@ -17,58 +20,12 @@ from database import (
     get_latest_sensor_reading,
     get_previous_sensor_reading,
     get_recent_sensor_readings,
-)
-
-from weather_service import router as weather_router
-
-
-# ============================================================
-# APPLICATION
-# ============================================================
-
-app = FastAPI(
-    title="Smart Campus Digital Twin API",
-    description=(
-        "AI/ML backend for Smart Campus Digital Twin "
-        "with live WeatherAPI integration"
-    ),
-    version="1.1.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8081",
-        "http://127.0.0.1:8081",
-
-        # Expo web
-        "http://localhost:8082",
-        "http://127.0.0.1:8082",
-        "http://192.168.31.98:8082",
-
-        # Older Expo web ports
-        "http://localhost:19006",
-        "http://127.0.0.1:19006",
-    ],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    get_connection,
 )
 
 
-# Register WeatherAPI endpoints:
-# GET /environment
-# GET /environment/latest
-# GET /environment/history
-
-app.include_router(weather_router)
-app.include_router(occupancy_router)
-app.include_router(maintenance_router)
-app.include_router(rag_router)
-
-
 # ============================================================
-# PATHS
+# PATHS AND CONFIGURATION
 # ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -79,6 +36,54 @@ ENERGY_MODEL_PATH = MODEL_DIR / "energy_model.pkl"
 ANOMALY_MODEL_PATH = MODEL_DIR / "anomaly_model.pkl"
 
 
+def get_campus_capacity():
+    """Return configured maximum simultaneous student capacity."""
+    try:
+        capacity = float(
+            os.getenv("CAMPUS_STUDENT_CAPACITY", "0")
+        )
+        return capacity if capacity > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
+
+app = FastAPI(
+    title="Smart Campus Digital Twin API",
+    description=(
+        "AI/ML backend for Smart Campus Digital Twin "
+        "with live WeatherAPI integration and "
+        "daily class occupancy aggregation."
+    ),
+    version="1.2.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+        "http://localhost:8082",
+        "http://127.0.0.1:8082",
+        "http://192.168.31.98:8082",
+        "http://localhost:19006",
+        "http://127.0.0.1:19006",
+    ],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register all existing routers.
+app.include_router(weather_router)
+app.include_router(occupancy_router)
+app.include_router(maintenance_router)
+app.include_router(rag_router)
+
+
 # ============================================================
 # DATABASE INITIALIZATION
 # ============================================================
@@ -87,17 +92,11 @@ initialize_database()
 
 
 # ============================================================
-# MODEL LOADING
+# ML MODEL LOADING
 # ============================================================
 
-def load_ml_model(model_path):
-    """
-    Load an ML model from a pickle/joblib file.
-
-    Supports models saved directly and models wrapped
-    inside a dictionary.
-    """
-
+def load_ml_model(model_path: Path):
+    """Load a model saved directly or wrapped in a dictionary."""
     if not model_path.exists():
         raise FileNotFoundError(
             f"Model not found: {model_path}"
@@ -106,58 +105,138 @@ def load_ml_model(model_path):
     model = joblib.load(model_path)
 
     if isinstance(model, dict):
-        possible_keys = [
+        for key in (
             "model",
             "estimator",
             "classifier",
             "regressor",
             "anomaly_model",
-        ]
-
-        for key in possible_keys:
+        ):
             if key in model:
                 return model[key]
 
     return model
 
 
-occupancy_model = load_ml_model(
-    OCCUPANCY_MODEL_PATH
-)
+occupancy_model = load_ml_model(OCCUPANCY_MODEL_PATH)
+energy_model = load_ml_model(ENERGY_MODEL_PATH)
+anomaly_model = load_ml_model(ANOMALY_MODEL_PATH)
 
-energy_model = load_ml_model(
-    ENERGY_MODEL_PATH
-)
-
-anomaly_model = load_ml_model(
-    ANOMALY_MODEL_PATH
-)
-
-
-# ============================================================
-# FEATURE PREPARATION
-# ============================================================
 
 def prepare_features(model, data):
-    """
-    Prepare input features in the same order used
-    when the model was trained.
-    """
-
+    """Match feature names and order expected by the saved model."""
     dataframe = pd.DataFrame([data])
 
     if hasattr(model, "feature_names_in_"):
-        expected_features = list(
-            model.feature_names_in_
-        )
+        expected = list(model.feature_names_in_)
 
-        for feature in expected_features:
+        for feature in expected:
             if feature not in dataframe.columns:
                 dataframe[feature] = 0
 
-        dataframe = dataframe[expected_features]
+        dataframe = dataframe[expected]
 
     return dataframe
+
+
+# ============================================================
+# DAILY CLASS OCCUPANCY AGGREGATION
+# ============================================================
+
+def get_class_occupancy_snapshots():
+    """
+    Sum the manual student counts for the most recent reporting
+    date that is not in the future.
+
+    The database stores one row per class/section and date.
+    Updating a class/date replaces its count rather than adding
+    a duplicate, so this SUM gives the total of reported sections.
+
+    Returns:
+        (latest_snapshot, previous_snapshot)
+
+    Each snapshot contains:
+        record_date
+        total_students_present
+        class_sections_reported
+    """
+    today = datetime.now().date().isoformat()
+    connection = get_connection()
+
+    def read_snapshot(record_date):
+        if not record_date:
+            return None
+
+        row = connection.execute(
+            """
+            SELECT
+                record_date,
+                COALESCE(SUM(student_count), 0)
+                    AS total_students_present,
+                COUNT(*) AS class_sections_reported
+            FROM class_occupancy
+            WHERE record_date = ?
+            GROUP BY record_date
+            """,
+            (record_date,),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return {
+            "record_date": row["record_date"],
+            "total_students_present": int(
+                row["total_students_present"]
+            ),
+            "class_sections_reported": int(
+                row["class_sections_reported"]
+            ),
+        }
+
+    try:
+        latest_date_row = connection.execute(
+            """
+            SELECT MAX(record_date) AS record_date
+            FROM class_occupancy
+            WHERE record_date <= ?
+            """,
+            (today,),
+        ).fetchone()
+
+        latest_date = (
+            latest_date_row["record_date"]
+            if latest_date_row
+            else None
+        )
+
+        if not latest_date:
+            return None, None
+
+        latest_snapshot = read_snapshot(latest_date)
+
+        previous_date_row = connection.execute(
+            """
+            SELECT MAX(record_date) AS record_date
+            FROM class_occupancy
+            WHERE record_date < ?
+              AND record_date <= ?
+            """,
+            (latest_date, today),
+        ).fetchone()
+
+        previous_date = (
+            previous_date_row["record_date"]
+            if previous_date_row
+            else None
+        )
+
+        previous_snapshot = read_snapshot(previous_date)
+
+        return latest_snapshot, previous_snapshot
+
+    finally:
+        connection.close()
 
 
 # ============================================================
@@ -166,36 +245,92 @@ def prepare_features(model, data):
 
 def get_campus_context():
     """
-    Get the latest and previous campus sensor readings.
+    Retrieve the latest sensor reading and override its occupancy
+    with the summed manual class count when manual records exist.
 
-    Campus sensor readings remain separate from WeatherAPI
-    outdoor weather readings.
+    Energy, temperature, humidity and class_schedule remain sourced
+    from the sensor table.
     """
+    latest_record = get_latest_sensor_reading()
 
-    latest = get_latest_sensor_reading()
-
-    if latest is None:
+    if latest_record is None:
         raise HTTPException(
             status_code=404,
-            detail="No sensor data available.",
+            detail=(
+                "No sensor data available. Record an initial "
+                "sensor reading before requesting campus analytics."
+            ),
         )
 
-    previous = get_previous_sensor_reading()
+    latest = dict(latest_record)
 
-    if previous is None:
-        previous = latest
+    previous_record = get_previous_sensor_reading()
+    previous = (
+        dict(previous_record)
+        if previous_record is not None
+        else dict(latest)
+    )
+
+    latest_snapshot, previous_snapshot = (
+        get_class_occupancy_snapshots()
+    )
+
+    if latest_snapshot is not None:
+        total = latest_snapshot["total_students_present"]
+
+        latest["occupancy"] = float(total)
+        latest["occupancy_source"] = "daily_class_occupancy"
+        latest["occupancy_record_date"] = (
+            latest_snapshot["record_date"]
+        )
+        latest["class_sections_reported"] = (
+            latest_snapshot["class_sections_reported"]
+        )
+
+        if previous_snapshot is not None:
+            previous["occupancy"] = float(
+                previous_snapshot["total_students_present"]
+            )
+        else:
+            # Avoid comparing a raw class total with an older
+            # sensor value potentially stored on another scale.
+            previous["occupancy"] = float(total)
+
+    else:
+        latest["occupancy_source"] = "sensor_reading"
+        latest["occupancy_record_date"] = None
+        latest["class_sections_reported"] = 0
 
     now = datetime.now()
 
     return {
         "latest": latest,
         "previous": previous,
+        "occupancy_snapshot": latest_snapshot,
+        "previous_occupancy_snapshot": previous_snapshot,
         "hour": now.hour,
         "day_of_week": now.weekday(),
-        "is_weekend": (
-            1 if now.weekday() >= 5 else 0
-        ),
+        "is_weekend": 1 if now.weekday() >= 5 else 0,
     }
+
+
+def get_occupancy_level(student_count):
+    """
+    Classify occupancy using configured campus capacity.
+    Never interpret a raw student count as a percentage.
+    """
+    capacity = get_campus_capacity()
+
+    if capacity is None:
+        return "Capacity not configured"
+
+    percentage = (float(student_count) / capacity) * 100
+
+    if percentage < 40:
+        return "Low"
+    if percentage < 80:
+        return "Normal"
+    return "High"
 
 
 # ============================================================
@@ -204,7 +339,6 @@ def get_campus_context():
 
 def predict_next_occupancy():
     context = get_campus_context()
-
     latest = context["latest"]
     previous = context["previous"]
 
@@ -217,16 +351,11 @@ def predict_next_occupancy():
         "class_schedule": latest["class_schedule"],
     }
 
-    dataframe = prepare_features(
-        occupancy_model,
-        features,
-    )
-
     prediction = occupancy_model.predict(
-        dataframe
+        prepare_features(occupancy_model, features)
     )[0]
 
-    return max(0, float(prediction))
+    return max(0.0, float(prediction))
 
 
 # ============================================================
@@ -235,7 +364,6 @@ def predict_next_occupancy():
 
 def predict_next_energy():
     context = get_campus_context()
-
     latest = context["latest"]
     previous = context["previous"]
 
@@ -249,16 +377,11 @@ def predict_next_energy():
         "class_schedule": latest["class_schedule"],
     }
 
-    dataframe = prepare_features(
-        energy_model,
-        features,
-    )
-
     prediction = energy_model.predict(
-        dataframe
+        prepare_features(energy_model, features)
     )[0]
 
-    return max(0, float(prediction))
+    return max(0.0, float(prediction))
 
 
 # ============================================================
@@ -267,7 +390,6 @@ def predict_next_energy():
 
 def predict_current_anomaly():
     context = get_campus_context()
-
     latest = context["latest"]
 
     features = {
@@ -277,27 +399,17 @@ def predict_current_anomaly():
         "humidity": latest["humidity"],
     }
 
-    dataframe = prepare_features(
-        anomaly_model,
-        features,
-    )
-
-    prediction = anomaly_model.predict(
-        dataframe
-    )[0]
-
+    dataframe = prepare_features(anomaly_model, features)
+    prediction = anomaly_model.predict(dataframe)[0]
     anomaly_detected = int(prediction) == -1
 
     anomaly_score = None
 
     if hasattr(anomaly_model, "decision_function"):
         try:
-            decision = anomaly_model.decision_function(
-                dataframe
-            )[0]
-
-            anomaly_score = float(decision)
-
+            anomaly_score = float(
+                anomaly_model.decision_function(dataframe)[0]
+            )
         except Exception:
             anomaly_score = None
 
@@ -313,45 +425,58 @@ def predict_current_anomaly():
 # ============================================================
 
 def calculate_health_score():
-    context = get_campus_context()
+    """
+    Maintain the existing 30/30/40 weighted score when campus
+    capacity is configured.
 
+    Without capacity, a raw student count cannot produce a valid
+    occupancy percentage. In that case, rescale the energy and
+    anomaly components and mark the occupancy score unavailable.
+    """
+    context = get_campus_context()
     latest = context["latest"]
 
     occupancy = float(latest["occupancy"])
     energy = float(latest["energy"])
 
     anomaly_result = predict_current_anomaly()
+    capacity = get_campus_capacity()
 
-    # Occupancy score
-    if occupancy <= 80:
-        occupancy_score = 100
-    else:
+    occupancy_percentage = None
+    occupancy_score = None
+
+    if capacity is not None:
+        occupancy_percentage = (occupancy / capacity) * 100
+
         occupancy_score = max(
-            0,
-            100 - ((occupancy - 80) * 2),
+            0.0,
+            100.0 - max(0.0, occupancy_percentage - 80.0) * 2.0,
         )
 
-    # Energy score
     if energy <= 1400:
-        energy_score = 100
+        energy_score = 100.0
     else:
         energy_score = max(
-            0,
-            100 - ((energy - 1400) / 10),
+            0.0,
+            100.0 - ((energy - 1400.0) / 10.0),
         )
 
-    # Anomaly score
-    if anomaly_result["anomaly_detected"]:
-        anomaly_score = 30
-    else:
-        anomaly_score = 100
-
-    # Weighted decision layer
-    final_score = (
-        occupancy_score * 0.30
-        + energy_score * 0.30
-        + anomaly_score * 0.40
+    anomaly_score = (
+        30.0 if anomaly_result["anomaly_detected"] else 100.0
     )
+
+    if occupancy_score is not None:
+        final_score = (
+            occupancy_score * 0.30
+            + energy_score * 0.30
+            + anomaly_score * 0.40
+        )
+    else:
+        # The occupancy component is not included until capacity
+        # exists; available weights are normalized to total 100%.
+        final_score = (
+            energy_score * 0.30 + anomaly_score * 0.40
+        ) / 0.70
 
     final_score = round(final_score, 2)
 
@@ -365,12 +490,18 @@ def calculate_health_score():
     return {
         "score": final_score,
         "status": status,
-        "occupancy_score": round(
-            occupancy_score, 2
+        "occupancy_score": (
+            round(occupancy_score, 2)
+            if occupancy_score is not None
+            else None
         ),
-        "energy_score": round(
-            energy_score, 2
+        "occupancy_percentage": (
+            round(occupancy_percentage, 2)
+            if occupancy_percentage is not None
+            else None
         ),
+        "occupancy_capacity_configured": capacity is not None,
+        "energy_score": round(energy_score, 2),
         "anomaly_score": anomaly_score,
     }
 
@@ -384,12 +515,16 @@ def root():
     return {
         "message": "Smart Campus Digital Twin API",
         "status": "running",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "database": "SQLite",
         "weather_integration": "WeatherAPI",
+        "manual_class_occupancy_enabled": True,
+        "campus_student_capacity_configured": (
+            get_campus_capacity() is not None
+        ),
         "ml_models": {
-            "occupancy": "Random Forest",
-            "energy": "Random Forest",
+            "occupancy": "Random Forest Regressor",
+            "energy": "Random Forest Regressor",
             "anomaly": "Isolation Forest",
         },
     }
@@ -401,21 +536,13 @@ def root():
 
 @app.get("/sensor-data")
 def sensor_data():
-    latest = get_latest_sensor_reading()
-
-    if latest is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No sensor data available.",
-        )
-
-    return latest
+    # Return occupancy from the manual total when available.
+    return get_campus_context()["latest"]
 
 
 @app.get("/sensor-data/recent")
 def recent_sensor_data():
     readings = get_recent_sensor_readings()
-
     return {
         "count": len(readings),
         "readings": readings,
@@ -444,7 +571,7 @@ def add_sensor_data(sensor: SensorData):
         class_schedule=sensor.class_schedule,
     )
 
-    latest = get_latest_sensor_reading()
+    latest = get_campus_context()["latest"]
 
     return {
         "message": "Sensor data stored successfully.",
@@ -460,50 +587,40 @@ def add_sensor_data(sensor: SensorData):
 @app.get("/occupancy")
 def occupancy_prediction():
     context = get_campus_context()
-
     latest = context["latest"]
 
-    prediction = predict_next_occupancy()
-
     current = float(latest["occupancy"])
+    prediction = predict_next_occupancy()
     difference = prediction - current
 
-    if prediction < 40:
-        level = "Low"
-    elif prediction < 80:
-        level = "Normal"
-    else:
-        level = "High"
-
     if difference > 10:
-        insight = (
-            "Campus occupancy is expected "
-            "to increase."
-        )
+        insight = "Campus occupancy is expected to increase."
     elif difference < -10:
-        insight = (
-            "Campus occupancy is expected "
-            "to decrease."
-        )
+        insight = "Campus occupancy is expected to decrease."
     else:
-        insight = (
-            "Campus occupancy is expected "
-            "to remain relatively stable."
-        )
+        insight = "Campus occupancy is expected to remain relatively stable."
+
+    snapshot = context["occupancy_snapshot"]
 
     return {
         "current_occupancy": round(current, 2),
-        "predicted_occupancy": round(
-            prediction, 2
-        ),
+        "total_students_present": round(current, 2),
+        "predicted_occupancy": round(prediction, 2),
         "difference": round(difference, 2),
-        "level": level,
+        "level": get_occupancy_level(prediction),
         "insight": insight,
+        "occupancy_source": latest["occupancy_source"],
+        "occupancy_record_date": latest["occupancy_record_date"],
+        "class_sections_reported": latest["class_sections_reported"],
+        "occupancy_capacity_configured": get_campus_capacity() is not None,
         "model": "Random Forest Regressor",
         "model_status": "ML prediction active",
         "previous_occupancy": round(
-            float(context["previous"]["occupancy"]),
-            2,
+            float(context["previous"]["occupancy"]), 2
+        ),
+        "reporting_date_total": (
+            snapshot["total_students_present"]
+            if snapshot else None
         ),
     }
 
@@ -515,20 +632,12 @@ def occupancy_prediction():
 @app.get("/energy")
 def energy_prediction():
     context = get_campus_context()
-
     latest = context["latest"]
 
     prediction = predict_next_energy()
-
     current = float(latest["energy"])
     difference = prediction - current
-
-    percentage = 0
-
-    if current != 0:
-        percentage = (
-            difference / current
-        ) * 100
+    percentage = (difference / current * 100) if current else 0
 
     if prediction < 1000:
         level = "Low"
@@ -538,37 +647,25 @@ def energy_prediction():
         level = "High"
 
     if difference > 150:
-        insight = (
-            "Energy consumption is expected "
-            "to increase."
-        )
+        insight = "Energy consumption is expected to increase."
     elif difference < -150:
-        insight = (
-            "Energy consumption is expected "
-            "to decrease."
-        )
+        insight = "Energy consumption is expected to decrease."
     else:
-        insight = (
-            "Energy consumption is expected "
-            "to remain relatively stable."
-        )
+        insight = "Energy consumption is expected to remain relatively stable."
 
     return {
         "current_energy": round(current, 2),
-        "predicted_energy": round(
-            prediction, 2
-        ),
+        "predicted_energy": round(prediction, 2),
         "difference": round(difference, 2),
-        "percentage_change": round(
-            percentage, 2
-        ),
+        "percentage_change": round(percentage, 2),
         "level": level,
         "insight": insight,
+        "occupancy_input": round(float(latest["occupancy"]), 2),
+        "occupancy_source": latest["occupancy_source"],
         "model": "Random Forest Regressor",
         "model_status": "ML prediction active",
         "previous_energy": round(
-            float(context["previous"]["energy"]),
-            2,
+            float(context["previous"]["energy"]), 2
         ),
     }
 
@@ -580,70 +677,65 @@ def energy_prediction():
 @app.get("/anomaly")
 def anomaly_detection():
     context = get_campus_context()
-
     latest = context["latest"]
-
     result = predict_current_anomaly()
 
     if result["anomaly_detected"]:
         status = "Anomaly Detected"
         risk = "High"
-
         analysis = (
-            "The Isolation Forest model detected "
-            "an unusual campus sensor pattern."
+            "The Isolation Forest model detected an unusual "
+            "campus sensor pattern."
         )
     else:
         status = "Normal"
         risk = "Low"
-
         analysis = (
-            "Current campus sensor values are "
-            "within the learned normal pattern."
+            "Current campus sensor values are within the "
+            "learned normal pattern."
         )
 
     return {
         "status": status,
         "risk": risk,
-        "anomaly_detected": result[
-            "anomaly_detected"
-        ],
+        "anomaly_detected": result["anomaly_detected"],
         "anomaly_score": result["anomaly_score"],
         "sensor_data": {
             "occupancy": latest["occupancy"],
+            "occupancy_source": latest["occupancy_source"],
             "energy": latest["energy"],
             "temperature": latest["temperature"],
             "humidity": latest["humidity"],
         },
         "analysis": analysis,
         "model": "Isolation Forest",
-        "model_status": (
-            "ML anomaly detection active"
-        ),
+        "model_status": "ML anomaly detection active",
     }
 
 
 # ============================================================
-# HEALTH API
+# CAMPUS HEALTH API
 # ============================================================
 
 @app.get("/health")
 def campus_health():
     context = get_campus_context()
-
     latest = context["latest"]
 
     health = calculate_health_score()
     anomaly = predict_current_anomaly()
+    snapshot = context["occupancy_snapshot"]
+
+    insight = (
+        "Campus health uses occupancy, energy and anomaly "
+        "detection. The occupancy component is scored against "
+        "capacity only when CAMPUS_STUDENT_CAPACITY is configured."
+    )
 
     return {
         "score": health["score"],
         "status": health["status"],
-        "insight": (
-            "Campus health score is calculated "
-            "using occupancy, energy and anomaly "
-            "detection."
-        ),
+        "insight": insight,
         "component_scores": {
             "occupancy": health["occupancy_score"],
             "energy": health["energy_score"],
@@ -651,19 +743,25 @@ def campus_health():
         },
         "inputs": {
             "occupancy": latest["occupancy"],
+            "total_students_present": latest["occupancy"],
+            "occupancy_source": latest["occupancy_source"],
+            "occupancy_record_date": latest["occupancy_record_date"],
+            "class_sections_reported": latest["class_sections_reported"],
+            "occupancy_percentage": health["occupancy_percentage"],
             "energy": latest["energy"],
             "temperature": latest["temperature"],
             "humidity": latest["humidity"],
-            "anomaly_detected": anomaly[
-                "anomaly_detected"
-            ],
+            "anomaly_detected": anomaly["anomaly_detected"],
+            "occupancy_capacity_configured": (
+                health["occupancy_capacity_configured"]
+            ),
+            "reporting_date_total": (
+                snapshot["total_students_present"]
+                if snapshot else None
+            ),
         },
-        "decision_layer": (
-            "Weighted Rule-Based Decision Layer"
-        ),
-        "model_status": (
-            "ML + Decision Layer active"
-        ),
+        "decision_layer": "Weighted Rule-Based Decision Layer",
+        "model_status": "ML + Decision Layer active",
     }
 
 
@@ -674,16 +772,10 @@ def campus_health():
 @app.get("/recommendations")
 def recommendations():
     context = get_campus_context()
-
     latest = context["latest"]
 
-    current_occupancy = float(
-        latest["occupancy"]
-    )
-
-    current_energy = float(
-        latest["energy"]
-    )
+    current_occupancy = float(latest["occupancy"])
+    current_energy = float(latest["energy"])
 
     predicted_occupancy = predict_next_occupancy()
     predicted_energy = predict_next_energy()
@@ -693,209 +785,160 @@ def recommendations():
 
     recommendation_list = []
 
-    # Occupancy recommendation
-    if predicted_occupancy > 80:
+    capacity = get_campus_capacity()
+
+    if capacity is None:
+        recommendation_list.append({
+            "category": "Occupancy",
+            "priority": "Medium",
+            "title": "Campus capacity required",
+            "message": (
+                f"The latest reported total is "
+                f"{round(current_occupancy)} students. "
+                "Configure campus capacity before determining "
+                "low, normal or high occupancy."
+            ),
+            "action": (
+                "Set CAMPUS_STUDENT_CAPACITY to the approved "
+                "maximum simultaneous student count."
+            ),
+        })
+    elif predicted_occupancy / capacity >= 0.8:
         recommendation_list.append({
             "category": "Occupancy",
             "priority": "High",
             "title": "High Occupancy Expected",
             "message": (
-                "Predicted campus occupancy is high."
+                "Predicted headcount is at least 80% "
+                "of configured campus capacity."
             ),
             "action": (
-                "Monitor crowded areas and "
-                "optimize room allocation."
+                "Monitor crowded areas and optimize room allocation."
             ),
         })
-
-    elif predicted_occupancy < 40:
+    elif predicted_occupancy / capacity < 0.4:
         recommendation_list.append({
             "category": "Occupancy",
             "priority": "Low",
             "title": "Low Occupancy Expected",
             "message": (
-                "Predicted occupancy is relatively low."
+                "Predicted headcount is below 40% "
+                "of configured campus capacity."
             ),
             "action": (
-                "Consider consolidating lightly "
-                "occupied spaces."
+                "Consider consolidating lightly occupied spaces."
             ),
         })
-
     else:
         recommendation_list.append({
             "category": "Occupancy",
             "priority": "Normal",
-            "title": "Occupancy Stable",
+            "title": "Occupancy Within Expected Range",
             "message": (
-                "Predicted occupancy is within "
-                "the normal operating range."
+                "Predicted headcount is between 40% and 80% "
+                "of configured campus capacity."
             ),
-            "action": (
-                "Continue normal campus operations."
-            ),
+            "action": "Continue normal campus operations.",
         })
 
-    # Energy recommendation
     if predicted_energy > 1600:
         recommendation_list.append({
             "category": "Energy",
             "priority": "High",
             "title": "High Energy Consumption",
-            "message": (
-                "Predicted energy consumption is high."
-            ),
-            "action": (
-                "Review HVAC, lighting and "
-                "high-load equipment."
-            ),
+            "message": "Predicted energy consumption is high.",
+            "action": "Review HVAC, lighting and high-load equipment.",
         })
-
     elif predicted_energy < 1000:
         recommendation_list.append({
             "category": "Energy",
             "priority": "Low",
             "title": "Low Energy Consumption",
-            "message": (
-                "Predicted energy consumption "
-                "is relatively low."
-            ),
-            "action": (
-                "Maintain current energy-saving practices."
-            ),
+            "message": "Predicted energy consumption is relatively low.",
+            "action": "Maintain current energy-saving practices.",
         })
-
     else:
         recommendation_list.append({
             "category": "Energy",
             "priority": "Normal",
             "title": "Energy Consumption Stable",
-            "message": (
-                "Predicted energy consumption "
-                "is within the normal range."
-            ),
-            "action": (
-                "Continue monitoring energy usage."
-            ),
+            "message": "Predicted energy consumption is within the normal range.",
+            "action": "Continue monitoring energy usage.",
         })
 
-    # Anomaly recommendation
     if anomaly["anomaly_detected"]:
         recommendation_list.append({
             "category": "Anomaly",
             "priority": "High",
             "title": "Sensor Anomaly Detected",
-            "message": (
-                "The anomaly detection model "
-                "identified an unusual pattern."
-            ),
-            "action": (
-                "Maintenance team should inspect "
-                "the affected campus conditions."
-            ),
+            "message": "The anomaly detection model identified an unusual pattern.",
+            "action": "Maintenance should inspect the affected campus conditions.",
         })
-
     else:
         recommendation_list.append({
             "category": "Anomaly",
             "priority": "Low",
             "title": "No Major Anomaly",
-            "message": (
-                "Current sensor patterns appear normal."
-            ),
-            "action": (
-                "Continue regular monitoring."
-            ),
+            "message": "Current sensor patterns appear normal.",
+            "action": "Continue regular monitoring.",
         })
 
-    # Campus health recommendation
     if health["score"] < 60:
         recommendation_list.append({
             "category": "Campus Health",
             "priority": "High",
             "title": "Campus Health Needs Attention",
-            "message": (
-                "The overall campus health score "
-                "is below the normal threshold."
-            ),
-            "action": (
-                "Review occupancy, energy and "
-                "anomaly conditions."
-            ),
+            "message": "The overall campus health score is below the normal threshold.",
+            "action": "Review occupancy, energy and anomaly conditions.",
         })
-
     elif health["score"] < 80:
         recommendation_list.append({
             "category": "Campus Health",
             "priority": "Medium",
             "title": "Campus Health Moderate",
-            "message": (
-                "Campus conditions are acceptable "
-                "but can be improved."
-            ),
-            "action": (
-                "Monitor the major contributing factors."
-            ),
+            "message": "Campus conditions are acceptable but can be improved.",
+            "action": "Monitor the major contributing factors.",
         })
-
     else:
         recommendation_list.append({
             "category": "Campus Health",
             "priority": "Low",
             "title": "Campus Health Good",
-            "message": (
-                "Overall campus conditions are healthy."
-            ),
-            "action": (
-                "Maintain current operating conditions."
-            ),
+            "message": "Overall campus conditions are healthy.",
+            "action": "Maintain current operating conditions.",
         })
 
     summary = (
-        f"Current occupancy is "
-        f"{round(current_occupancy)} and predicted "
-        f"occupancy is {round(predicted_occupancy)}. "
-        f"Current energy usage is "
-        f"{round(current_energy)} and predicted "
-        f"energy is {round(predicted_energy)}. "
-        f"Campus health score is "
-        f"{round(health['score'])}/100."
+        f"Current reported headcount is {round(current_occupancy)}; "
+        f"predicted occupancy is {round(predicted_occupancy)}. "
+        f"Current energy is {round(current_energy)}; "
+        f"predicted energy is {round(predicted_energy)}. "
+        f"Campus health score is {round(health['score'])}/100."
     )
 
     return {
         "summary": summary,
         "recommendations": recommendation_list,
         "ml_inputs": {
-            "current_occupancy": round(
-                current_occupancy, 2
-            ),
-            "predicted_occupancy": round(
-                predicted_occupancy, 2
-            ),
-            "current_energy": round(
-                current_energy, 2
-            ),
-            "predicted_energy": round(
-                predicted_energy, 2
-            ),
+            "current_occupancy": round(current_occupancy, 2),
+            "predicted_occupancy": round(predicted_occupancy, 2),
+            "current_energy": round(current_energy, 2),
+            "predicted_energy": round(predicted_energy, 2),
             "anomaly_risk": (
-                "High"
-                if anomaly["anomaly_detected"]
-                else "Low"
+                "High" if anomaly["anomaly_detected"] else "Low"
             ),
             "health_score": health["score"],
+            "occupancy_source": latest["occupancy_source"],
+            "occupancy_capacity_configured": capacity is not None,
         },
         "models": {
             "occupancy": "Random Forest Regressor",
             "energy": "Random Forest Regressor",
             "anomaly": "Isolation Forest",
-            "decision_layer": (
-                "Weighted Rule-Based Decision Layer"
-            ),
+            "decision_layer": "Weighted Rule-Based Decision Layer",
         },
         "model_status": (
-            "Occupancy + Energy + Anomaly "
-            "+ Decision Layer active"
+            "Occupancy + Energy + Anomaly + Decision Layer active"
         ),
     }
 
@@ -910,48 +953,29 @@ class WhatIfRequest(BaseModel):
 
 
 @app.post("/what-if")
-def what_if_simulation(
-    request: WhatIfRequest,
-):
-    latest = get_latest_sensor_reading()
+def what_if_simulation(request: WhatIfRequest):
+    context = get_campus_context()
+    latest = context["latest"]
 
-    if latest is None:
-        raise HTTPException(
-            status_code=404,
-            detail="No sensor data available.",
-        )
-
-    current_occupancy = float(
-        latest["occupancy"]
-    )
-
-    current_energy = float(
-        latest["energy"]
-    )
-
-    simulated_occupancy = (
-        current_occupancy
-        * (1 + request.occupancy_change / 100)
-    )
-
-    simulated_energy = (
-        current_energy
-        * (1 + request.energy_change / 100)
-    )
+    current_occupancy = float(latest["occupancy"])
+    current_energy = float(latest["energy"])
 
     simulated_occupancy = max(
-        0,
-        simulated_occupancy,
+        0.0,
+        current_occupancy * (1 + request.occupancy_change / 100),
     )
-
     simulated_energy = max(
-        0,
-        simulated_energy,
+        0.0,
+        current_energy * (1 + request.energy_change / 100),
     )
 
-    if simulated_occupancy > 80:
+    capacity = get_campus_capacity()
+
+    if capacity is None:
+        occupancy_effect = "Configure campus capacity to classify occupancy"
+    elif simulated_occupancy / capacity >= 0.8:
         occupancy_effect = "High occupancy"
-    elif simulated_occupancy < 40:
+    elif simulated_occupancy / capacity < 0.4:
         occupancy_effect = "Low occupancy"
     else:
         occupancy_effect = "Normal occupancy"
@@ -965,34 +989,21 @@ def what_if_simulation(
 
     return {
         "current": {
-            "occupancy": round(
-                current_occupancy, 2
-            ),
-            "energy": round(
-                current_energy, 2
-            ),
+            "occupancy": round(current_occupancy, 2),
+            "energy": round(current_energy, 2),
         },
         "simulated": {
-            "occupancy": round(
-                simulated_occupancy, 2
-            ),
-            "energy": round(
-                simulated_energy, 2
-            ),
+            "occupancy": round(simulated_occupancy, 2),
+            "energy": round(simulated_energy, 2),
         },
         "changes": {
-            "occupancy_percent": (
-                request.occupancy_change
-            ),
-            "energy_percent": (
-                request.energy_change
-            ),
+            "occupancy_percent": request.occupancy_change,
+            "energy_percent": request.energy_change,
         },
         "interpretation": {
             "occupancy": occupancy_effect,
             "energy": energy_effect,
         },
-        "model_status": (
-            "What-If Decision Simulation active"
-        ),
+        "occupancy_source": latest["occupancy_source"],
+        "model_status": "What-If Decision Simulation active",
     }

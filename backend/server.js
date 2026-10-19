@@ -1,6 +1,20 @@
+// Load environment variables first
+require("dotenv").config();
+
+const dns = require("node:dns");
+
+// Local DNS workaround: enable only when explicitly configured.
+// Production deployments use their default DNS configuration.
+if (
+  process.env.NODE_ENV !== "production" &&
+  process.env.USE_GOOGLE_DNS === "true"
+) {
+  dns.setServers(["8.8.8.8"]);
+  console.log("Google DNS enabled for local development.");
+}
+
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
 
 const connectDB = require("./config/db");
 
@@ -39,9 +53,9 @@ app.get("/", (req, res) => {
   });
 });
 
-// Server
+// Start server
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
