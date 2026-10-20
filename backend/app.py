@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from datetime import datetime
 from fastapi.middleware.cors import CORSMiddleware
+from sensor_simulator import router as sensor_simulator_router
 
 import joblib
 import pandas as pd
@@ -80,6 +81,7 @@ app.include_router(weather_router)
 app.include_router(occupancy_router)
 app.include_router(maintenance_router)
 app.include_router(rag_router)
+app.include_router(sensor_simulator_router)
 
 
 # ============================================================
