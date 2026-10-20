@@ -143,7 +143,7 @@ export default function AIRecommendations() {
   if (error) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorIcon}>âš ï¸</Text>
+        <Text style={styles.errorIcon}>{"\u26A0\uFE0F"}</Text>
 
         <Text style={styles.errorTitle}>
           Connection Error
@@ -203,7 +203,7 @@ export default function AIRecommendations() {
       <View style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
           <View style={styles.summaryIcon}>
-            <Text style={styles.summaryIconText}>âœ¦</Text>
+            <Text style={styles.summaryIconText}>{"\u2726"}</Text>
           </View>
 
           <Text style={styles.summaryTitle}>
@@ -231,7 +231,7 @@ export default function AIRecommendations() {
 
       <View style={styles.metricsGrid}>
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>ðŸ‘¥</Text>
+          <Text style={styles.metricIcon}>{"\u{1F465}"}</Text>
 
           <Text style={styles.metricLabel}>
             Occupancy
@@ -247,7 +247,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>âš¡</Text>
+          <Text style={styles.metricIcon}>{"\u26A1"}</Text>
 
           <Text style={styles.metricLabel}>
             Energy
@@ -263,7 +263,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>ðŸš¨</Text>
+          <Text style={styles.metricIcon}>{"\u{1F6A8}"}</Text>
 
           <Text style={styles.metricLabel}>
             Anomaly Risk
@@ -282,7 +282,7 @@ export default function AIRecommendations() {
         </View>
 
         <View style={styles.metricCard}>
-          <Text style={styles.metricIcon}>â¤ï¸</Text>
+          <Text style={styles.metricIcon}>{"\u{1F3E5}"}</Text>
 
           <Text style={styles.metricLabel}>
             Campus Health
@@ -305,7 +305,7 @@ export default function AIRecommendations() {
 
       {data.recommendations.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyIcon}>âœ…</Text>
+          <Text style={styles.emptyIcon}>{"\u2705"}</Text>
 
           <Text style={styles.emptyTitle}>
             No Immediate Actions
@@ -406,7 +406,7 @@ export default function AIRecommendations() {
         onPress={fetchRecommendations}
       >
         <Text style={styles.refreshButtonText}>
-          â†»  Refresh AI Analysis
+          {"\u21BB"}  Refresh AI Analysis
         </Text>
       </Pressable>
 
