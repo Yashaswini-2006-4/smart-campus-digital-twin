@@ -140,6 +140,13 @@ export default function LoginScreen() {
           <Text style={styles.info}>
             Student • Faculty • Admin • Maintenance
           </Text>
+
+          <Pressable
+            style={styles.registerLinkButton}
+            onPress={() => router.push('/register')}
+          >
+            <Text style={styles.registerLinkText}>New here? Create an account</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -248,5 +255,16 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 12,
     marginTop: 18,
+  },
+
+  registerLinkButton: {
+    alignItems: 'center',
+    paddingTop: 18,
+  },
+
+  registerLinkText: {
+    color: '#2563EB',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

@@ -11,7 +11,7 @@ const ALLOWED_ROLES = new Set([
 ]);
 
 // Register a new user.
-// Public registration creates student accounts only.
+// Public registration creates pending accounts; an administrator must assign a role.
 const register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
@@ -45,11 +45,11 @@ const register = async (req, res) => {
       name: name.trim(),
       email: email.trim(),
       password: hashedPassword,
-      role: "student",
+      role: "pending",
     });
 
     return res.status(201).json({
-      message: "User registered successfully",
+      message: "Registration received. Your account is awaiting role assignment by an administrator.",
       user: {
         id: user._id,
         name: user.name,
@@ -114,6 +114,13 @@ const login = async (req, res) => {
     const assignedRole = String(user.role || "")
       .trim()
       .toLowerCase();
+
+    if (assignedRole === "pending") {
+      return res.status(403).json({
+        message:
+          "Your registration is pending. An administrator must assign your role before you can access the system.",
+      });
+    }
 
     if (!ALLOWED_ROLES.has(assignedRole)) {
       return res.status(403).json({
@@ -215,8 +222,65 @@ const selectRole = async (req, res) => {
   }
 };
 
+// Return registrations that still need an administrator to assign a role.
+const listPendingUsers = async (req, res) => {
+  try {
+    const users = await User.find({ role: "pending" })
+      .select("name email createdAt")
+      .sort({ createdAt: 1 });
+
+    return res.status(200).json({ users });
+  } catch (error) {
+    console.error("Unable to list pending users:", error);
+    return res.status(500).json({ message: "Unable to load pending registrations" });
+  }
+};
+
+// Only an existing authenticated admin can assign one of the supported roles.
+const assignUserRole = async (req, res) => {
+  try {
+    const requestedRole =
+      typeof req.body?.role === "string"
+        ? req.body.role.trim().toLowerCase()
+        : "";
+
+    if (!ALLOWED_ROLES.has(requestedRole)) {
+      return res.status(400).json({
+        message: "Role must be student, faculty, admin, or maintenance",
+      });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { _id: req.params.userId, role: "pending" },
+      { $set: { role: requestedRole } },
+      { new: true, runValidators: true },
+    ).select("name email role");
+
+    if (!user) {
+      return res.status(404).json({
+        message: "Pending registration not found. It may already have been assigned a role.",
+      });
+    }
+
+    return res.status(200).json({
+      message: `Role assigned successfully: ${requestedRole}`,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.error("Unable to assign user role:", error);
+    return res.status(500).json({ message: "Unable to assign role" });
+  }
+};
+
 module.exports = {
   register,
   login,
   selectRole,
+  listPendingUsers,
+  assignUserRole,
 };

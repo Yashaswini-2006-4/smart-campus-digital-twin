@@ -15,7 +15,25 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import RoleGuard from '../components/auth/RoleGuard';
 import { API_BASE_URL } from '../constants/api';
 
+type AirQualityData = {
+  available?: boolean;
+  us_epa_index?: number | null;
+  us_epa_category?: string | null;
+  gb_defra_index?: number | null;
+  gb_defra_band?: string | null;
+  pm2_5?: number | null;
+  pm10?: number | null;
+  co?: number | null;
+  o3?: number | null;
+  no2?: number | null;
+  so2?: number | null;
+  last_updated?: string | null;
+  index_note?: string;
+  pollutant_units?: string;
+};
+
 type EnvironmentData = {
+  air_quality?: AirQualityData;
   location?: string;
   region?: string;
   temperature_c?: number;
@@ -74,6 +92,19 @@ function formatNumber(value: unknown, decimals = 1): string {
   }
 
   return Number(value.toFixed(decimals)).toString();
+}
+
+function aqiColor(index?: number | null): string {
+  if (typeof index !== 'number' || !Number.isFinite(index)) return '#64748B';
+  if (index <= 1) return '#15803D';
+  if (index <= 2) return '#65A30D';
+  if (index <= 3) return '#D97706';
+  if (index <= 4) return '#EA580C';
+  return '#B91C1C';
+}
+
+function pollutantValue(value?: number | null): string {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '—';
 }
 
 function priorityColor(priority?: string): string {
@@ -515,6 +546,72 @@ export default function StudentDashboard() {
             )}
           </View>
 
+          {/* Live air quality from the existing environment API */}
+          <View style={styles.aqiCard}>
+            <View style={styles.aqiHeader}>
+              <View style={styles.aqiHeaderText}>
+                <Text style={styles.aqiTitle}>🌿 Live Air Quality (AQI)</Text>
+                <Text style={styles.aqiSubtitle}>
+                  {[weather?.location, weather?.region].filter(Boolean).join(', ') || 'Outdoor air quality'}
+                </Text>
+              </View>
+              <Pressable style={styles.refreshButton} onPress={() => void fetchWeather(true)}>
+                <Text style={styles.refreshButtonText}>↻ Refresh</Text>
+              </Pressable>
+            </View>
+            {weather?.air_quality?.available ? (
+              <>
+                <View style={styles.aqiIndexRow}>
+                  <View style={styles.aqiIndexPanel}>
+                    <Text style={styles.aqiIndexLabel}>US EPA Index</Text>
+                    <Text style={[styles.aqiIndexValue, { color: aqiColor(weather.air_quality.us_epa_index) }]}>
+                      {weather.air_quality.us_epa_index ?? '—'}
+                    </Text>
+                    <Text style={styles.aqiCategory}>{weather.air_quality.us_epa_category ?? 'Not provided'}</Text>
+                  </View>
+                  <View style={styles.aqiDivider} />
+                  <View style={styles.aqiIndexPanel}>
+                    <Text style={styles.aqiIndexLabel}>UK DEFRA Index</Text>
+                    <Text style={[styles.aqiIndexValue, { color: aqiColor(weather.air_quality.gb_defra_index) }]}>
+                      {weather.air_quality.gb_defra_index ?? '—'}
+                    </Text>
+                    <Text style={styles.aqiCategory}>{weather.air_quality.gb_defra_band ?? 'Not provided'}</Text>
+                  </View>
+                </View>
+                <Text style={styles.aqiPollutantHeading}>Pollutants</Text>
+                <View style={styles.aqiPollutantGrid}>
+                  {([
+                    ['PM2.5', weather.air_quality.pm2_5],
+                    ['PM10', weather.air_quality.pm10],
+                    ['CO', weather.air_quality.co],
+                    ['O₃', weather.air_quality.o3],
+                    ['NO₂', weather.air_quality.no2],
+                    ['SO₂', weather.air_quality.so2],
+                  ] as const).map(([label, value]) => (
+                    <View key={label} style={styles.aqiPollutantItem}>
+                      <Text style={styles.aqiPollutantLabel}>{label}</Text>
+                      <Text style={styles.aqiPollutantValue}>{pollutantValue(value)}</Text>
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.aqiUpdated}>
+                  {weather.air_quality.last_updated || weather.last_updated
+                    ? `Observation: ${weather.air_quality.last_updated || weather.last_updated}`
+                    : 'Observation time not provided'}
+                </Text>
+                <Text style={styles.aqiNote}>
+                  {weather.air_quality.index_note || 'Index standards are defined by the data provider.'}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.aqiUnavailableText}>
+                {weatherError || weather?.air_quality?.available === false
+                  ? 'Live AQI is currently unavailable. Check the weather service AQI access and try refreshing.'
+                  : 'Loading live air-quality readings…'}
+              </Text>
+            )}
+          </View>
+
           {/* AI recommendations */}
           <Text style={styles.sectionTitle}>AI Recommendations 🤖</Text>
 
@@ -652,6 +749,25 @@ export default function StudentDashboard() {
 }
 
 const styles = StyleSheet.create({
+  aqiCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginTop: 18, marginBottom: 8, borderWidth: 1, borderColor: '#D1FAE5' },
+  aqiHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 14 },
+  aqiHeaderText: { flex: 1 },
+  aqiTitle: { color: '#111827', fontSize: 17, fontWeight: 'bold' },
+  aqiSubtitle: { color: '#6B7280', fontSize: 12, marginTop: 4 },
+  aqiIndexRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, paddingVertical: 14 },
+  aqiIndexPanel: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  aqiDivider: { width: 1, alignSelf: 'stretch', backgroundColor: '#E2E8F0' },
+  aqiIndexLabel: { color: '#64748B', fontSize: 12, fontWeight: '600' },
+  aqiIndexValue: { fontSize: 31, fontWeight: 'bold', marginTop: 5 },
+  aqiCategory: { color: '#475569', fontSize: 12, textAlign: 'center', marginTop: 2 },
+  aqiPollutantHeading: { color: '#374151', fontSize: 13, fontWeight: '700', marginTop: 16, marginBottom: 8 },
+  aqiPollutantGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  aqiPollutantItem: { width: '30%', flexGrow: 1, backgroundColor: '#F8FAFC', borderRadius: 9, padding: 10 },
+  aqiPollutantLabel: { color: '#64748B', fontSize: 12 },
+  aqiPollutantValue: { color: '#111827', fontSize: 15, fontWeight: 'bold', marginTop: 4 },
+  aqiUpdated: { color: '#64748B', fontSize: 11, marginTop: 12 },
+  aqiNote: { color: '#64748B', fontSize: 11, lineHeight: 16, marginTop: 7 },
+  aqiUnavailableText: { color: '#64748B', fontSize: 13, lineHeight: 19, paddingVertical: 8 },
   screen: {
     flex: 1,
     backgroundColor: '#F5F7FB',

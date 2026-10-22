@@ -384,6 +384,16 @@ export default function AdminDashboard() {
           </View>
         </View>
 
+        <Pressable
+          style={styles.approvalsLink}
+          onPress={() => router.push('/user-approvals')}
+        >
+          <Text style={styles.approvalsLinkTitle}>👥 Registration Approvals</Text>
+          <Text style={styles.approvalsLinkDescription}>
+            Review new accounts and assign Student, Faculty, Admin, or Maintenance access.
+          </Text>
+        </Pressable>
+
         {/* Loading */}
         {loading && (
           <View style={styles.loadingCard}>
@@ -718,6 +728,16 @@ function FeatureCard({
 }
 
 const styles = StyleSheet.create({
+  approvalsLink: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  approvalsLinkTitle: { color: '#1D4ED8', fontSize: 16, fontWeight: 'bold' },
+  approvalsLinkDescription: { color: '#475569', fontSize: 13, lineHeight: 19, marginTop: 5 },
   container: {
     flex: 1,
     backgroundColor: '#F5F7FB',
