@@ -1,16 +1,25 @@
-
+import sqlite3
+from pathlib import Path
 from datetime import datetime
 
-from db_compat import DATABASE_PATH, get_connection
+
+BASE_DIR = Path(__file__).resolve().parent
+DATABASE_PATH = BASE_DIR / "campus.db"
+
+
+def get_connection():
+    connection = sqlite3.connect(DATABASE_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
 def initialize_database():
-    """Create the campus tables if they do not already exist."""
     connection = get_connection()
 
     try:
         cursor = connection.cursor()
 
+        # Existing campus readings table
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS sensor_readings (
@@ -25,6 +34,7 @@ def initialize_database():
             """
         )
 
+        # New table for live outdoor weather
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS environment_readings (
@@ -44,6 +54,8 @@ def initialize_database():
             """
         )
 
+
+        # Daily class-wise occupancy. One row per class/section per date.
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS class_occupancy (
@@ -51,8 +63,7 @@ def initialize_database():
                 record_date TEXT NOT NULL,
                 class_section TEXT NOT NULL COLLATE NOCASE,
                 room_number TEXT NOT NULL,
-                student_count INTEGER NOT NULL
-                    CHECK (student_count >= 0),
+                student_count INTEGER NOT NULL CHECK (student_count >= 0),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 UNIQUE (record_date, class_section)
@@ -67,7 +78,7 @@ def initialize_database():
 
 
 # ============================================================
-# CAMPUS SENSOR READINGS
+# EXISTING CAMPUS SENSOR READINGS
 # ============================================================
 
 def insert_sensor_reading(
@@ -75,7 +86,7 @@ def insert_sensor_reading(
     energy,
     temperature,
     humidity,
-    class_schedule,
+    class_schedule
 ):
     connection = get_connection()
 
@@ -102,7 +113,7 @@ def insert_sensor_reading(
                 temperature,
                 humidity,
                 class_schedule,
-            ),
+            )
         )
 
         connection.commit()
@@ -117,6 +128,7 @@ def get_latest_sensor_reading():
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -145,6 +157,7 @@ def get_previous_sensor_reading():
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -170,10 +183,12 @@ def get_previous_sensor_reading():
 
 def get_recent_sensor_readings(limit=20):
     limit = max(1, min(int(limit), 100))
+
     connection = get_connection()
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -188,7 +203,7 @@ def get_recent_sensor_readings(limit=20):
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            (limit,)
         )
 
         return [dict(row) for row in cursor.fetchall()]
@@ -211,7 +226,7 @@ def insert_environment_reading(
     feels_like_c,
     wind_kph,
     last_updated,
-    source="WeatherAPI",
+    source="WeatherAPI"
 ):
     connection = get_connection()
 
@@ -248,7 +263,7 @@ def insert_environment_reading(
                 wind_kph,
                 last_updated,
                 source,
-            ),
+            )
         )
 
         connection.commit()
@@ -263,6 +278,7 @@ def get_latest_environment_reading():
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -293,10 +309,12 @@ def get_latest_environment_reading():
 
 def get_recent_environment_readings(limit=20):
     limit = max(1, min(int(limit), 100))
+
     connection = get_connection()
 
     try:
         cursor = connection.cursor()
+
         cursor.execute(
             """
             SELECT
@@ -316,7 +334,7 @@ def get_recent_environment_readings(limit=20):
             ORDER BY id DESC
             LIMIT ?
             """,
-            (limit,),
+            (limit,)
         )
 
         return [dict(row) for row in cursor.fetchall()]
@@ -324,18 +342,12 @@ def get_recent_environment_readings(limit=20):
     finally:
         connection.close()
 
-
 # ============================================================
 # DAILY CLASS-WISE OCCUPANCY
 # ============================================================
 
-def save_class_occupancy(
-    record_date,
-    class_section,
-    room_number,
-    student_count,
-):
-    """Insert or update a class-section occupancy record for a date."""
+def save_class_occupancy(record_date, class_section, room_number, student_count):
+    """Insert a daily class occupancy record or update the existing class/date."""
     record_date = str(record_date).strip()
     class_section = str(class_section).strip()
     room_number = str(room_number).strip()
@@ -343,29 +355,21 @@ def save_class_occupancy(
 
     if not record_date:
         raise ValueError("Date is required.")
-
     if not class_section:
         raise ValueError("Class/section is required.")
-
     if not room_number:
         raise ValueError("Room number is required.")
-
     if student_count < 0:
         raise ValueError("Student count cannot be negative.")
 
     now = datetime.now().astimezone().isoformat()
     connection = get_connection()
-
     try:
         connection.execute(
             """
             INSERT INTO class_occupancy (
-                record_date,
-                class_section,
-                room_number,
-                student_count,
-                created_at,
-                updated_at
+                record_date, class_section, room_number,
+                student_count, created_at, updated_at
             )
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(record_date, class_section)
@@ -374,58 +378,33 @@ def save_class_occupancy(
                 student_count = excluded.student_count,
                 updated_at = excluded.updated_at
             """,
-            (
-                record_date,
-                class_section,
-                room_number,
-                student_count,
-                now,
-                now,
-            ),
+            (record_date, class_section, room_number, student_count, now, now),
         )
-
         connection.commit()
-
         row = connection.execute(
             """
-            SELECT
-                id,
-                record_date,
-                class_section,
-                room_number,
-                student_count,
-                created_at,
-                updated_at
+            SELECT id, record_date, class_section, room_number,
+                   student_count, created_at, updated_at
             FROM class_occupancy
-            WHERE record_date = ?
-              AND class_section = ? COLLATE NOCASE
+            WHERE record_date = ? AND class_section = ? COLLATE NOCASE
             """,
             (record_date, class_section),
         ).fetchone()
-
-        return dict(row) if row else None
-
+        return dict(row)
     finally:
         connection.close()
 
 
 def get_class_occupancy_history(record_date=None, limit=200):
-    """Return records for a date or the most recent occupancy records."""
+    """Return occupancy records for a date, or the most recent records."""
     limit = max(1, min(int(limit), 500))
     connection = get_connection()
-
     try:
         if record_date:
             rows = connection.execute(
                 """
-                SELECT
-                    id,
-                    record_date,
-                    class_section,
-                    room_number,
-                    student_count,
-                    created_at,
-                    updated_at
+                SELECT id, record_date, class_section, room_number,
+                       student_count, created_at, updated_at
                 FROM class_occupancy
                 WHERE record_date = ?
                 ORDER BY class_section COLLATE NOCASE
@@ -433,28 +412,35 @@ def get_class_occupancy_history(record_date=None, limit=200):
                 """,
                 (str(record_date), limit),
             ).fetchall()
-
         else:
             rows = connection.execute(
                 """
-                SELECT
-                    id,
-                    record_date,
-                    class_section,
-                    room_number,
-                    student_count,
-                    created_at,
-                    updated_at
+                SELECT id, record_date, class_section, room_number,
+                       student_count, created_at, updated_at
                 FROM class_occupancy
-                ORDER BY
-                    record_date DESC,
-                    class_section COLLATE NOCASE
+                ORDER BY record_date DESC, class_section COLLATE NOCASE
                 LIMIT ?
                 """,
                 (limit,),
             ).fetchall()
-
         return [dict(row) for row in rows]
+    finally:
+        connection.close()
 
+
+def delete_class_occupancy_before(cutoff_date):
+    """Delete occupancy records strictly older than cutoff_date."""
+    cutoff_date = str(cutoff_date).strip()
+    if not cutoff_date:
+        raise ValueError("Cutoff date is required.")
+
+    connection = get_connection()
+    try:
+        cursor = connection.execute(
+            "DELETE FROM class_occupancy WHERE record_date < ?",
+            (cutoff_date,),
+        )
+        connection.commit()
+        return max(0, cursor.rowcount)
     finally:
         connection.close()

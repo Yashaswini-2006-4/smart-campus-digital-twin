@@ -13,7 +13,8 @@ import {
 import { router } from 'expo-router';
 
 import RoleGuard from '../components/auth/RoleGuard';
-import { API_BASE_URL } from '../constants/api';
+import { API_BASE_URL, NODE_API_URL } from '../constants/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type OccupancyRecord = {
   id: number;
@@ -42,6 +43,7 @@ export default function ClassOccupancyScreen() {
   const [records, setRecords] = useState<OccupancyRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingOld, setDeletingOld] = useState(false);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -120,6 +122,55 @@ export default function ClassOccupancyScreen() {
     }
   };
 
+  const handleDeleteOldRecords = () => {
+    const cutoffDate = historyDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cutoffDate)) {
+      Alert.alert(
+        'Choose a cutoff date',
+        'Enter a valid date in YYYY-MM-DD format. Records older than this date will be deleted; records on this date will be kept.',
+      );
+      return;
+    }
+
+    const message = `Permanently delete all occupancy records older than ${cutoffDate}? Records dated ${cutoffDate} and later will be kept.`;
+    const confirmDelete = async () => {
+      setDeletingOld(true);
+      try {
+        const token = await AsyncStorage.getItem('token');
+        if (!token) throw new Error('Your session has expired. Please log in again.');
+        const response = await fetch(`${NODE_API_URL}/api/occupancy/class-occupancy/delete-old`, {
+          method: 'DELETE',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ cutoff_date: cutoffDate }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.message || data.detail || `Delete failed (HTTP ${response.status}).`);
+        }
+        Alert.alert('Old records deleted', `${data.deleted_count ?? 0} record(s) older than ${cutoffDate} deleted.`);
+        await loadHistory();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Could not delete old records.';
+        Alert.alert('Delete failed', message);
+      } finally {
+        setDeletingOld(false);
+      }
+    };
+
+    if (typeof window !== 'undefined' && (globalThis as any).window?.confirm) {
+      if (window.confirm(message)) void confirmDelete();
+    } else {
+      Alert.alert('Confirm deletion', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete old records', style: 'destructive', onPress: () => void confirmDelete() },
+      ]);
+    }
+  };
+
   return (
     <RoleGuard allowedRole="maintenance">
       <ScrollView
@@ -193,10 +244,32 @@ export default function ClassOccupancyScreen() {
         <TextInput
           value={historyDate}
           onChangeText={setHistoryDate}
-          placeholder="Leave blank to view recent records"
+          placeholder="YYYY-MM-DD, or choose Show All"
           style={styles.input}
           autoCapitalize="none"
         />
+        <View style={styles.historyActions}>
+          <Pressable
+            onPress={() => setHistoryDate('')}
+            style={styles.secondaryButton}
+          >
+            <Text style={styles.secondaryButtonText}>Show All</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleDeleteOldRecords}
+            disabled={deletingOld || !historyDate.trim()}
+            style={[styles.deleteButton, (deletingOld || !historyDate.trim()) && styles.disabledButton]}
+          >
+            {deletingOld ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.deleteButtonText}>Delete Old Records</Text>
+            )}
+          </Pressable>
+        </View>
+        <Text style={styles.deleteHint}>
+          Delete removes records older than the selected date. The selected date and newer records are kept.
+        </Text>
 
         {loading ? (
           <ActivityIndicator size="large" color="#2563EB" style={styles.loader} />
@@ -239,6 +312,12 @@ const styles = StyleSheet.create({
   disabledButton: { opacity: 0.65 },
   primaryButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  historyActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
+  secondaryButton: { borderColor: '#2563EB', borderWidth: 1, borderRadius: 9, paddingVertical: 11, paddingHorizontal: 16, alignItems: 'center' },
+  secondaryButtonText: { color: '#2563EB', fontWeight: '700' },
+  deleteButton: { backgroundColor: '#B91C1C', borderRadius: 9, paddingVertical: 11, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  deleteButtonText: { color: '#FFFFFF', fontWeight: '700' },
+  deleteHint: { color: '#6B7280', fontSize: 12, lineHeight: 18, marginTop: 8 },
   refreshText: { color: '#2563EB', fontWeight: '600' },
   loader: { marginTop: 24 },
   emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 18, marginTop: 12 },

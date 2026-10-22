@@ -26,6 +26,7 @@ const facilityRoutes = require("./routes/facilityRoutes");
 const digitalTwinRoutes = require("./routes/digitalTwinRoutes");
 const complaintRoutes = require("./routes/complaintRoutes");
 const maintenanceRoutes = require("./routes/maintenanceRoutes");
+const occupancyRoutes = require("./routes/occupancyRoutes");
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use("/api/facilities", facilityRoutes);
 app.use("/api/digital-twin", digitalTwinRoutes);
 app.use("/api/complaints", complaintRoutes);
 app.use("/api/maintenance", maintenanceRoutes);
+app.use("/api/occupancy", occupancyRoutes);
 
 // Home route
 app.get("/", (req, res) => {
