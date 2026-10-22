@@ -1,5 +1,4 @@
-﻿
-import { Platform } from 'react-native';
+﻿import { Platform } from 'react-native';
 
 // Local development defaults
 const WEB_HOST = 'localhost';
@@ -7,11 +6,12 @@ const DEVICE_HOST = '192.168.31.98';
 
 const HOST = Platform.OS === 'web' ? WEB_HOST : DEVICE_HOST;
 
-// Production API URLs supplied through Expo environment variables.
+// Configure these in Vercel/Expo for deployed builds.
+// Example values are your public Render service URLs, not secrets.
 const configuredNodeApiUrl = process.env.EXPO_PUBLIC_NODE_API_URL?.trim();
 const configuredAiApiUrl = process.env.EXPO_PUBLIC_AI_API_URL?.trim();
 
-// Normalize URLs by removing trailing slashes.
+// Remove trailing slashes so endpoint paths append consistently.
 const normalizeBaseUrl = (
   url: string | undefined,
   fallback: string,
